@@ -34,7 +34,7 @@ public:
          m_focus_map.map[c] = new uint32[m_samples*m_upsample_factor];
          for (uint32 s = 0; s < m_samples*m_upsample_factor; s++)
          {
-            m_focus_map.map[c][s] = s + (rand() % 4);
+            m_focus_map.map[c][s] = s + (rand() % upsample_factor);
          }
       }
 

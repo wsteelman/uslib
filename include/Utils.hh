@@ -47,7 +47,7 @@ inline void GenTaps(float *taps, uint32 num_upsample_taps, float cutoff, float s
    return;
 }
 
-inline void GenerateFakeImage(uint32 vectors, uint32 samples, uint8 *img)
+inline void GenerateFakeImage(uint32 vectors, uint32 samples, uint8 *img, uint32 frame)
 {
    for (uint32 v = 0; v < vectors; v++)
    {
@@ -56,9 +56,27 @@ inline void GenerateFakeImage(uint32 vectors, uint32 samples, uint8 *img)
       {
          *(img++) = 0x80;
       }
-      for(x = 0; x < samples/2; x++)
+
+      if (v > (vectors/2 - 30) && v < (vectors/2 + 30))
       {
-         *(img++) = (uint8)(128 + 64*cos(x*5.0*PI/180.0));
+         for(x = 0; x < samples/2; x++)
+         {
+            if (x > (frame*8 + 500) && x < (frame*8 + 1500))
+            {
+               *(img++) = 0x80;
+            }
+            else
+            {
+               *(img++) = (uint8)(128 + 64*cos(x*1.0*PI/180.0));
+            } 
+         }
+      }
+      else
+      {
+         for(x = 0; x < samples/2; x++)
+         {
+            *(img++) = (uint8)(128 + 64*cos(x*1.0*PI/180.0));
+         }
       }
       for(x = 0; x < samples/4; x++)
       {

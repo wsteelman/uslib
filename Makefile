@@ -8,7 +8,8 @@ endif
 
 CC = g++
 CFLAGS = -Wall
-LDFLAGS = -pthread -lm -lfftw3
+LDFLAGS = -pthread -lm -lfftw3 -lGL -lGLU -framework GLUT -framework OpenGL
+LIBPATH = -L"/System/Library/Frameworks/OpenGl.framework/Libraries"
 DEBUGFLAGS = -DDEBUG -g3
 OPTFLAGS = -O5
 
@@ -28,7 +29,7 @@ debug: OPTFLAGS =
 debug: $(PROGRAM)
 
 $(PROGRAM): .depend $(OBJS)
-	$(CC) $(CFLAGS) $(OPTFLAGS) $(OBJS) $(LDFLAGS) -I$(HEADERDIR) -I$(SOURCEDIR) -I$(OBJDIR) -o $(BUILDDIR)/$(PROGRAM)
+	$(CC) $(CFLAGS) $(OPTFLAGS) $(OBJS) $(LIBPATH) $(LDFLAGS) -I$(HEADERDIR) -I$(SOURCEDIR) -I$(OBJDIR) -o $(BUILDDIR)/$(PROGRAM)
 
 depend: .depend
 
