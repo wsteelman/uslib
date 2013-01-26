@@ -28,7 +28,7 @@ public:
 
    virtual err Calculate(FocusOffsets *offsets);
     
-   virtual err Run(Frame *f);
+   virtual err Run(Frame *f, uint32 thread_id);
 
 private:
    inline float FocusPixel(uint32 *samples, float *weights,

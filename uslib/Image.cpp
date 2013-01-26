@@ -4,9 +4,10 @@
 namespace uslib
 {
 
-Frame::Frame(uint32 num_channels, uint32 image_map_id,
+Frame::Frame(uint32 id, uint32 num_channels, uint32 image_map_id,
              uint32 vectors, uint32 samples,
              uint32 max_display_size) :
+   m_id(id),
    m_num_channels(num_channels),
    m_map_id(image_map_id),
    m_vectors(vectors),

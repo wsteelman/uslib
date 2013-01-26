@@ -124,7 +124,7 @@ FocusMapSparse::FocusPixel(uint32 *samples, float *weights,
 }
 
 err 
-FocusMapSparse::Run(Frame *f)
+FocusMapSparse::Run(Frame *f, uint32 thread_id)
 {
    if (m_channels != f->GetNumChannels())
    {

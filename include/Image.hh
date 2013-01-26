@@ -4,13 +4,17 @@
 
 #include <stdlib.h>
 #include "types.h"
+#include "PointerRing.hh"
 
 namespace uslib
 {
+class Frame;
+typedef PointerRing<Frame> FrameRing;
+
 class Frame
 {
 public:
-   Frame(uint32 num_channels, uint32 image_map_id,
+   Frame(uint32 id, uint32 num_channels, uint32 image_map_id,
          uint32 vectors, uint32 samples,
          uint32 max_display_size);
 
@@ -27,6 +31,11 @@ public:
    void SetImageMapID(uint32 id)
    {
       m_map_id = id;
+   }
+
+   uint32 GetFrameID() const
+   {
+      return m_id;
    }
 
    uint32 GetImageMapID() const
@@ -74,6 +83,7 @@ public:
    }
 
 private:
+   uint32   m_id;
    uint32   m_num_channels;
    uint32   m_map_id;
    uint32   m_vectors;

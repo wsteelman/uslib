@@ -1,6 +1,6 @@
 
-#ifndef FOCUS_MAP_SPARSE2_HH
-#define FOCUS_MAP_SPARSE2_HH
+#ifndef FOCUS_MAP_SPARSE_MULTI_HH
+#define FOCUS_MAP_SPARSE_MULTI_HH
 
 #include "FocusMap.hh"
 #include "Transducer.hh"
@@ -10,7 +10,7 @@
 
 namespace uslib
 {
-class FocusMapSparse2 : public FocusMap
+class FocusMapSparseMulti : public FocusMap
 {
    struct SampleData
    {
@@ -23,10 +23,14 @@ class FocusMapSparse2 : public FocusMap
 
 
 public:
-   FocusMapSparse2(uint32 in_samples, uint32 out_samples, uint32 vectors, 
-               uint32 upsample_factor, uint32 channels);
+   FocusMapSparseMulti(uint32 in_samples, 
+                       uint32 out_samples, 
+                       uint32 vectors, 
+                       uint32 upsample_factor, 
+                       uint32 channels, 
+                       uint32 num_threads);
    
-   virtual ~FocusMapSparse2();
+   virtual ~FocusMapSparseMulti();
 
    virtual err Calculate(FocusOffsets *offsets);
     
@@ -44,8 +48,9 @@ private:
    float *m_upsample_taps;
    FocusOffsets *m_focus_offsets;
    SampleData *m_sample_map;
+   uint32 m_num_threads;
 
-}; // class FocusMapSparse2
+}; // class FocusMapSparseMulti
 } // nsmespace uslib
 
 #endif

@@ -33,7 +33,7 @@ public:
  
    ~SectorImageMapFast();
 
-   err Run(Frame *f);
+   err Run(Frame *f, uint32 thread_id);
 
    err CalculateMap(SectorTransducer *t, uint32 samples, uint32 vectors);
 

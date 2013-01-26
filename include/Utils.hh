@@ -2,6 +2,7 @@
 #define UTILS_HH_
 
 #include <math.h>
+#include "types.h"
 
 namespace uslib
 {

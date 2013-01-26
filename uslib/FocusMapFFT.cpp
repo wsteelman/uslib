@@ -62,7 +62,7 @@ FocusMapFFT::UpsampleVector(uint8 *in, double* out)
 
 
 err 
-FocusMapFFT::Run(Frame *f)
+FocusMapFFT::Run(Frame *f, uint32 thread_id)
 {
    if (m_channels != f->GetNumChannels())
    {

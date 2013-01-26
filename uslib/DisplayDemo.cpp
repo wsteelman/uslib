@@ -7,11 +7,15 @@
 #include <GLUT/glut.h>
 
 #include "types.h"
+#include "Image.hh"
 #include "ImageFactory.hh"
+#include "FrameList.hh"
+#include "FrameGenerator.hh"
 #include "FocusMapInt.hh"
 #include "FocusMapFFT.hh"
 #include "FocusMapSparse.hh"
 #include "FocusMapSparse2.hh"
+#include "FocusMapSparseMulti.hh"
 #include "SectorImageMapRF.hh"
 #include "SectorImageMapFast.hh"
 #include "SectorImageMapF2.hh"
@@ -24,26 +28,48 @@ using namespace uslib;
 #define MAX_RT_PRIO 90 
 
 #define SPEED_OF_SOUND     1.54 // mm/us
-#define RAW_SAMPLES        4096
-#define INT_SAMPLES        2048
-#define VECTORS            256
-#define RAW_SIZE           (RAW_SAMPLES * VECTORS)
+//#define RAW_SAMPLES        8192
+//#define INT_SAMPLES        2048
+//#define VECTORS            256
+//#define RAW_SIZE           (RAW_SAMPLES * VECTORS)
 
 #define IMG_WIDTH          512
 #define IMG_HEIGHT         512
-#define UPSAMPLE_FACTOR    4
-#define NUM_CHANNELS       6
-#define FRAMES             32
-#define CHNL_BUFFERS       (NUM_CHANNELS * FRAMES)
+//#define UPSAMPLE_FACTOR    4
+//#define NUM_CHANNELS       6
+//#define FRAMES             32
+//#define CHNL_BUFFERS       (NUM_CHANNELS * FRAMES)
+
+uint32  g_FFT_PIPELINE;
+uint32  g_SPARSE_PIPELINE;
+uint32  g_SPARSE_STAGED_PIPELINE;
 
 // globals
-ImageFactory *g_factory;
-Frame       **g_frames;
-uint32        g_frame_index;
-uint32        g_perf_cnt;
-int           g_timebase;
-float         g_fps;
-char          g_fps_char[16];
+ImageFactory   *g_factory;
+FrameGenerator *g_generator;
+FrameList      *g_free_list;
+FrameRing      *g_output_ring;
+uint32          g_perf_cnt;
+int             g_timebase;
+float           g_fps;
+char            g_fps_char[16];
+
+// returns true if failed
+//inline bool SetThreadPrio(int prio)
+//{
+//#ifdef _POSIX_PRIORITY_SCHEDULING
+//   int policy = prio ? SCHED_RR : SCHED_OTHER;
+//   struct sched_param sch_param = {0};
+//   sch_param.sched_priority = (int) prio;
+//   if (prio > MAX_RT_PRIO)      // 2.6.36 has issues with +99s
+//   {
+//      sch_param.sched_priority = (int) MAX_RT_PRIO;
+//   }
+//   return (sched_setscheduler(0, policy, &sch_param));
+//#else
+//   return false;
+//#endif
+//}
 
 long ntime(void)
 /* ----| Returns a long integer scaled to milliseconds |---- */
@@ -53,24 +79,6 @@ long ntime(void)
     gettimeofday(&tp, (struct timezone *)0);
     return (tp.tv_sec*1000 + tp.tv_usec / 1000);
 }
-
-// returns true if failed
-inline bool SetThreadPrio(int prio)
-{
-#ifdef _POSIX_PRIORITY_SCHEDULING
-   int policy = prio ? SCHED_RR : SCHED_OTHER;
-   struct sched_param sch_param = {0};
-   sch_param.sched_priority = (int) prio;
-   if (prio > MAX_RT_PRIO)      // 2.6.36 has issues with +99s
-   {
-      sch_param.sched_priority = (int) MAX_RT_PRIO;
-   }
-   return (sched_setscheduler(0, policy, &sch_param));
-#else
-   return false;
-#endif
-}
-
 
 void drawBitmapText(char *s, float x, float y) 
 {  
@@ -89,9 +97,12 @@ void drawBitmapText(char *s, float x, float y)
 
 void ImageGen()
 {
-   Frame *f = g_frames[g_frame_index];
-   g_frame_index = (g_frame_index+1) % FRAMES;
-   g_factory->GenerateImage(f);
+   Frame *f = NULL;
+   err rc = g_output_ring->Read(&f);
+   if (rc != SUCCESS)
+   {
+      return;
+   }
 
    glWindowPos2i(0,0);
    glDrawPixels(f->GetDisplayWidth(), 
@@ -111,6 +122,7 @@ void ImageGen()
    drawBitmapText(g_fps_char, 10.0f, 10.0f);
    
    glutSwapBuffers();
+   g_free_list->ReplaceFrame(f);
 }
 
 
@@ -118,40 +130,6 @@ void ImageGen()
 void display(void)
 {
    ImageGen();
-   //long stime, etime;
-   //stime = ntime();
-   //for(int i = 0; i < 50000; i++)
-   //{
-   //   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-   //   glEnable(GL_TEXTURE_2D);
-   //   glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE);
-   //   glBindTexture(GL_TEXTURE_2D, texName[0]);
-  
-   //   glBegin(GL_QUAD_STRIP);
-   //   int x1 = 0.0;
-   //   int y1 = 2.0;
-   //   float max_radius = 4.0;
-   //   float min_radius = 0.0;
-   //   float t = 512;
-   //   for(float angle = PI + MIN_ANGLE; 
-   //       angle < (PI + MAX_ANGLE/* + (SECTOR_RAD/t)*/); 
-   //       angle += (SECTOR_RAD/t))
-   //   {
-   //      float vnorm = ((angle-PI-MIN_ANGLE)/SECTOR_RAD);
-   //      glTexCoord2f(vnorm,1.0); 
-   //      glVertex2f(x1 + cos(angle) * min_radius, y1 + sin(angle) * min_radius);
-   //      glTexCoord2f(vnorm,0.0);
-   //      glVertex2f(x1 + cos(angle) * max_radius, y1 + sin(angle) * max_radius);
-   //   }
-   //   glEnd();
-
-
-   //   glFlush();
-   //   glDisable(GL_TEXTURE_2D);
-   //}
-   //etime = ntime();
-   //printf("num images = %i, t (ms) = %ld, frames/s = %f\n", 500, etime - stime, (double)500/(etime-stime) * 1000.0f);
-
 }
 
 void reshape(int w, int h)
@@ -196,95 +174,246 @@ void specialkeys(int key, int x, int y)
 
 void mouse(int button, int state, int x, int y)
 {
-  /*
-  if(state == GLUT_DOWN)
-  {
-    float xf = ((float)x - ((float)wnd_width)/2) / float(wnd_width);
-    float yf = (((float)wnd_height)/2 - (float)y) / float(wnd_height);
-    //printf("x %f, y %f\n",xf,yf);
-    //printf("scale %f\n", scale);
 
-    trans.x += -1 * xf * scale;
-    trans.y += -1 * yf * scale;
-    //printf("x %f, y %f, z %f\n",trans.x, trans.y, trans.z);
-    reshape(wnd_width, wnd_height);
-    display();
-  } 
-  */
 }
 
-int main(int argc, char **argv)
+void RunPerformanceTest(uint32 pipeline, uint32 num_frames, double *results)
+{
+   // stop generator and drain
+   g_generator->Stop();
+   // draing queue
+   Frame *f = NULL;
+   while (g_free_list->GetCount() < 100)
+   {
+      err rc = g_output_ring->Read(&f);
+      if (rc == SUCCESS)
+      {
+         g_free_list->ReplaceFrame(f);
+      }
+   }
+
+   FrameRing *input_ring = g_factory->GetInputRing(pipeline);
+   FrameRing *output_ring = g_factory->GetOutputRing(pipeline);
+
+   // setup test
+   memset(results, 0x00, num_frames*sizeof(float)); 
+   long start, end;
+
+   // collect samples 
+   for (uint32 x = 0; x < num_frames; x++)
+   { 
+      start = ntime();
+      const uint32 sub_cnt = 10;
+      for (uint32 y = 0; y < sub_cnt; y++)
+      {
+         g_generator->GenerateSingleFrame(input_ring);
+         Frame *f = NULL;
+         err rc = output_ring->Read(&f);
+         while (rc != SUCCESS)
+         {
+            rc = output_ring->Read(&f);
+         }
+         g_free_list->ReplaceFrame(f);
+      }
+      end = ntime();
+      results[x] = (end - start) / (double) sub_cnt;
+      //printf("Processed Frame %u\n", f->GetFrameID());
+   }
+}
+
+void ComputeStats(double *data, uint32 count, double *mean, double *std)
+{
+   double tmp = 0;
+   for (uint32 x = 0; x < count; x++)
+   {
+      tmp += (double)data[x]; 
+   } 
+   *mean = tmp / count;
+
+   // std
+   tmp = 0;
+   for (uint32 x = 0; x < count; x++)
+   {
+      tmp += pow(data[x] - *mean, 2.0); 
+   }
+   *std = sqrt(tmp/(double)count);
+   
+
+}
+
+void InitPipelines(SectorTransducer *t, uint32 RAW_SAMPLES, uint32 INT_SAMPLES, uint32 VECTORS,
+                   uint32 NUM_CHANNELS, uint32 UPSAMPLE_FACTOR)
 {
 
-   uint8 *raw_data = new uint8[VECTORS * RAW_SAMPLES];
-
-   g_factory = new ImageFactory();
-   FakeTransducer *t = new FakeTransducer(NUM_CHANNELS, VECTORS, RAW_SAMPLES, UPSAMPLE_FACTOR,
-                                          1.0);
-
-   FocusMapInt *fmap_int = new FocusMapInt(RAW_SAMPLES, INT_SAMPLES, VECTORS, UPSAMPLE_FACTOR, NUM_CHANNELS);
+   FocusMapInt *fmap_int = new FocusMapInt(RAW_SAMPLES, INT_SAMPLES, VECTORS, 
+                                           UPSAMPLE_FACTOR, NUM_CHANNELS);
    fmap_int->Calculate(t->GetFocusOffsets());
    
-   FocusMapFFT *fmap_fft = new FocusMapFFT(RAW_SAMPLES, INT_SAMPLES, VECTORS, UPSAMPLE_FACTOR, NUM_CHANNELS);
+   FocusMapFFT *fmap_fft = new FocusMapFFT(RAW_SAMPLES, INT_SAMPLES, VECTORS, 
+                                           UPSAMPLE_FACTOR, NUM_CHANNELS);
    fmap_fft->Calculate(t->GetFocusOffsets());
-   
-   FocusMapSparse *fmap_sparse0 = new FocusMapSparse(RAW_SAMPLES, INT_SAMPLES, VECTORS, UPSAMPLE_FACTOR, NUM_CHANNELS);
-   fmap_sparse0->Calculate(t->GetFocusOffsets());
-   
-   FocusMapSparse *fmap_sparse1 = new FocusMapSparse(RAW_SAMPLES, INT_SAMPLES, VECTORS, UPSAMPLE_FACTOR, NUM_CHANNELS);
-   fmap_sparse1->Calculate(t->GetFocusOffsets());
-   
-   FocusMapSparse2 *fmap_sparse2 = new FocusMapSparse2(RAW_SAMPLES, INT_SAMPLES, VECTORS, UPSAMPLE_FACTOR, NUM_CHANNELS);
+     
+   FocusMapSparse2 *fmap_sparse2 = new FocusMapSparse2(RAW_SAMPLES, INT_SAMPLES, VECTORS, 
+                                                       UPSAMPLE_FACTOR, NUM_CHANNELS);
    fmap_sparse2->Calculate(t->GetFocusOffsets());
+
+   FocusMapSparseMulti *fmap_sparse_4stage = new FocusMapSparseMulti(RAW_SAMPLES, INT_SAMPLES, VECTORS, 
+                                                       UPSAMPLE_FACTOR, NUM_CHANNELS, 4);
+   fmap_sparse_4stage->Calculate(t->GetFocusOffsets());
+
+   FocusMapSparseMulti *fmap_sparse_3stage = new FocusMapSparseMulti(RAW_SAMPLES, INT_SAMPLES, VECTORS, 
+                                                       UPSAMPLE_FACTOR, NUM_CHANNELS, 3);
+   fmap_sparse_3stage->Calculate(t->GetFocusOffsets());
 
    SectorImageMapFast *fast_map0 = new SectorImageMapFast("Fast", IMG_WIDTH, IMG_HEIGHT);
    fast_map0->CalculateMap(t, INT_SAMPLES, VECTORS);
-   SectorImageMapFast *fast_map1 = new SectorImageMapFast("Fast", IMG_WIDTH, IMG_HEIGHT);
-   fast_map1->CalculateMap(t, INT_SAMPLES, VECTORS);
-   SectorImageMapFast *fast_map2 = new SectorImageMapFast("Fast", IMG_WIDTH, IMG_HEIGHT);
+   SectorImageMapF2 *fast_map2 = new SectorImageMapF2("Fast", IMG_WIDTH, IMG_HEIGHT);
    fast_map2->CalculateMap(t, INT_SAMPLES, VECTORS);
-   SectorImageMapFast *fast_map3 = new SectorImageMapFast("Fast", IMG_WIDTH, IMG_HEIGHT);
-   fast_map3->CalculateMap(t, INT_SAMPLES, VECTORS);
-   SectorImageMapF2 *fast_map4 = new SectorImageMapF2("Fast", IMG_WIDTH, IMG_HEIGHT);
-   fast_map4->CalculateMap(t, INT_SAMPLES, VECTORS);
 
-   g_factory->AddImageTask(0, fmap_int);
-   g_factory->AddImageTask(0, fast_map0);
-  
-   g_factory->AddImageTask(1, fmap_fft);
-   g_factory->AddImageTask(1, fast_map1);
+   uint32 id = -1;
+   g_factory->InitializePipeline(1, &id);
+   g_factory->AddImageTask(id, 0, fmap_fft);
+   //g_factory->AddImageTask(id, 0, fast_map2);
+   g_FFT_PIPELINE = id;
 
-   g_factory->AddImageTask(2, fmap_sparse0);
-   g_factory->AddImageTask(2, fast_map2);
+   g_factory->InitializePipeline(1, &id);
+   g_factory->AddImageTask(id, 0, fmap_sparse2);
+   g_SPARSE_PIPELINE = id;
 
-   g_factory->AddImageTask(3, fmap_sparse1);
-   g_factory->AddImageTask(3, fast_map3);
- 
-   g_factory->AddImageTask(4, fmap_sparse2);
-   g_factory->AddImageTask(4, fast_map4);
- 
-   uint8 **data = new uint8*[CHNL_BUFFERS];
-   g_frames = new Frame*[FRAMES];   
-   for (uint32 x = 0; x < FRAMES; x++)
+   //g_factory->InitializePipeline(5, &id); 
+   //g_factory->AddImageTask(id, 1, fmap_sparse_4stage);
+   //g_factory->AddImageTask(id, 2, fmap_sparse_4stage);
+   //g_factory->AddImageTask(id, 3, fmap_sparse_4stage);
+   //g_factory->AddImageTask(id, 4, fmap_sparse_4stage);
+   //g_factory->AddImageTask(id, 5, fast_map2);
+   //g_SPARSE_STAGED_PIPELINE = id;
+   g_SPARSE_STAGED_PIPELINE = 0;
+}
+
+void usage(char *prog)
+{
+  printf("%s [-s raw_samples] [-x intermediate samples] [-v vectors] [-u upsample factor] [-c channels] \
+          [-f frames] [-t test frames] [-h]\
+          \n\t-s raw samples       : number of samples per input vector\
+          \n\t-x int samples       : number of samples per intermediate vector\
+          \n\t-v vectors           : number of vectors\
+          \n\t-u upsample factor   : upsample factor\
+          \n\t-c channels          : number of channels\
+          \n\t-f frames            : number of frames\
+          \n\t-t test frames       : number of frames for performance test\
+          \n\t-h                   : print this help message\n",prog);
+  return;
+}
+
+
+int main(int argc, char **argv)
+{
+   char c;
+
+   uint32 RAW_SAMPLES      = 8192;
+   uint32 INT_SAMPLES      = 2048;
+   uint32 VECTORS          = 256; 
+   uint32 RAW_SIZE         = RAW_SAMPLES * VECTORS;
+   uint32 UPSAMPLE_FACTOR  = 4; 
+   uint32 NUM_CHANNELS     = 6;
+   uint32 FRAMES           = 32;
+   uint32 TEST_FRAMES      = 100;
+   while ((c = getopt(argc, argv, "s:v:x:u:c:f:t:")) != -1)
    {
-      g_frames[x] = new Frame(NUM_CHANNELS, 0, VECTORS, INT_SAMPLES, IMG_WIDTH*IMG_HEIGHT);
-      g_frames[x]->SetImageMapID(4);
-      for (uint32 c = 0; c < NUM_CHANNELS; c++)
+      switch (c)
       {
-         uint8 *tmp = new uint8[RAW_SIZE];
-         data[x*NUM_CHANNELS + c] = tmp;
-         g_frames[x]->AddChannelData(c, tmp);
-         GenerateFakeImage(VECTORS, RAW_SAMPLES, tmp, x);
+      case 's':
+         RAW_SAMPLES = atoi(optarg);
+         RAW_SIZE    = RAW_SAMPLES * VECTORS;
+         break;
+
+      case 'x':
+         INT_SAMPLES = atoi(optarg);
+         break;
+
+      case 'v':
+         VECTORS  = atoi(optarg);
+         RAW_SIZE = RAW_SAMPLES * VECTORS;
+         break;
+
+      case 'u':
+         UPSAMPLE_FACTOR = atoi(optarg);
+         break;
+
+      case 'c':
+         NUM_CHANNELS = atoi(optarg);
+         break;
+
+      case 'f':
+         FRAMES = atoi(optarg);
+         break;
+   
+      case 't':
+         TEST_FRAMES = atoi(optarg);
+         break;
+   
+      case 'h':
+         usage((char*)argv[0]);
+         exit(1);
+         break;
+
+      default:
+         printf("Invalid argument %c\n", c);
+         usage((char*)argv[0]);
+         exit(1);
+         break;
       }
-    }
+   }
+
+   g_factory = new ImageFactory(64);
+   g_free_list = new FrameList(100, NUM_CHANNELS, VECTORS, RAW_SAMPLES, 
+                               0, IMG_WIDTH * IMG_HEIGHT);
+   
+   FakeTransducer *t = new FakeTransducer(NUM_CHANNELS, VECTORS, RAW_SAMPLES, 
+                                          UPSAMPLE_FACTOR, 1.0);
   
-   g_frame_index = 0;
+   InitPipelines(t, RAW_SAMPLES, INT_SAMPLES, VECTORS, NUM_CHANNELS, UPSAMPLE_FACTOR);
+ 
+   g_generator = new FrameGenerator(FRAMES, VECTORS, RAW_SAMPLES, NUM_CHANNELS, g_free_list, 
+                                    g_factory->GetInputRing(g_SPARSE_STAGED_PIPELINE));
+
+
+   g_output_ring = g_factory->GetOutputRing(g_SPARSE_STAGED_PIPELINE);
+   
+   g_factory->Start();
+
+   // run some perf tests
+   double fft_results[TEST_FRAMES];
+   double sparse_results[TEST_FRAMES];
+   double mean, std;
+
+   RunPerformanceTest(g_FFT_PIPELINE, TEST_FRAMES, fft_results);
+   RunPerformanceTest(g_SPARSE_PIPELINE, TEST_FRAMES, sparse_results);
+ 
+   ComputeStats(fft_results, TEST_FRAMES, &mean, &std);
+   printf("FFT Pipeline - Mean time: %f ms, STD: %f ms, %f frames/s\n", 
+          mean, std, 1000.0/mean);
+
+   ComputeStats(sparse_results, TEST_FRAMES, &mean, &std);
+   printf("Sparse Pipeline - Mean time: %f ms, STD: %f ms, %f frames/s\n", 
+          mean, std, 1000.0/mean);
+
+   // compute speedup
+   double speedup[TEST_FRAMES];
+   memset(speedup, 0x00, sizeof(speedup));
+   for (uint32 x = 0; x < TEST_FRAMES; x++)
+   {
+      speedup[x] = fft_results[x] / sparse_results[x];
+   }
+   ComputeStats(speedup, TEST_FRAMES, &mean, &std);
+   printf("Speedup - Mean: %f, STD: %f\n", mean, std);
+
+/* 
+   printf("Running Pipeline %u...\n", IMAGE_PIPELINE);
+   g_generator->Start();
    g_perf_cnt = 0;
    g_timebase = 0;
    g_fps = 0.0f;
-
-   SetThreadPrio(99);
-
 
    glutInit(&argc, argv);
    glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB);
@@ -299,22 +428,20 @@ int main(int argc, char **argv)
    glutSpecialFunc(specialkeys);
    glutIdleFunc(ImageGen); 
    glutMainLoop();
+*/
+   g_generator->Stop();
+   g_factory->Stop();
 
-   for (uint32 x = 0; x < CHNL_BUFFERS; x++)
+   // draing queue
+   Frame *f = NULL;
+   err rc = g_output_ring->Read(&f);
+   while (rc == SUCCESS)
    {
-      delete [] data[x];
+      rc = g_output_ring->Read(&f);
    }
-   delete [] data;
-   for (uint32 x = 0; x < FRAMES; x++)
-   {
-      delete g_frames[x];
-   }
-   delete [] g_frames; 
+
    delete g_factory;
-   delete raw_data;
-   delete fmap_int;
-   delete fmap_fft;
-   delete fmap_sparse0;
-   delete fmap_sparse1;
+   delete g_generator;
+   delete g_free_list;
    return 0;
 }

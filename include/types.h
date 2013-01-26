@@ -7,6 +7,7 @@
 #define SUCCESS    0
 #define ERROR      1
 #define OUTOFRANGE 2
+#define NOMEM      3
 
 // Constants
 #define NEG1_8  0xFF

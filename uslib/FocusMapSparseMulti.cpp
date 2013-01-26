@@ -1,19 +1,30 @@
 
-#include "FocusMapSparse2.hh"
+#include "FocusMapSparseMulti.hh"
 #include "Utils.hh"
 
 namespace uslib
 {
-FocusMapSparse2::FocusMapSparse2(uint32 in_samples, uint32 out_samples, uint32 vectors, 
-                         uint32 upsample_factor, uint32 channels) :
-   FocusMap("FocusMapSparse2", in_samples, out_samples, vectors, upsample_factor, channels)
+FocusMapSparseMulti::FocusMapSparseMulti(uint32 in_samples, 
+                                         uint32 out_samples, 
+                                         uint32 vectors, 
+                                         uint32 upsample_factor, 
+                                         uint32 channels,
+                                         uint32 num_threads) :
+   FocusMap("FocusMapSparseMulti", 
+            in_samples, 
+            out_samples, 
+            vectors, 
+            upsample_factor, 
+            channels),
+   m_num_taps(31),
+   m_num_threads(num_threads)
 {
    m_up_samples = m_in_samples * m_upsample_factor;
-   m_num_taps = 31;
+   m_num_taps = upsample_factor * 8 - 1;;
    m_sample_map = new SampleData[m_out_samples*m_vectors];
 }
 
-FocusMapSparse2::~FocusMapSparse2()
+FocusMapSparseMulti::~FocusMapSparseMulti()
 {
    delete [] m_upsample_taps;
    delete [] m_sample_map;
@@ -21,7 +32,7 @@ FocusMapSparse2::~FocusMapSparse2()
 
 
 err
-FocusMapSparse2::ComputeSampleData(FocusOffsets *map, uint32 sample_num, 
+FocusMapSparseMulti::ComputeSampleData(FocusOffsets *map, uint32 sample_num, 
                                      uint32 vector, uint32 taps,
                                      SampleData *data)
 {
@@ -35,7 +46,7 @@ FocusMapSparse2::ComputeSampleData(FocusOffsets *map, uint32 sample_num,
 }
 
 err
-FocusMapSparse2::ComputeUpsample(uint32 sample_num, uint32 vector, uint32 taps,
+FocusMapSparseMulti::ComputeUpsample(uint32 sample_num, uint32 vector, uint32 taps,
                                  uint32 channel, SampleData *data)
 {
    uint32 len = ((m_num_taps / m_upsample_factor) + 1) * m_upsample_factor; 
@@ -66,7 +77,7 @@ FocusMapSparse2::ComputeUpsample(uint32 sample_num, uint32 vector, uint32 taps,
 
 
 err
-FocusMapSparse2::Calculate(FocusOffsets *offsets)
+FocusMapSparseMulti::Calculate(FocusOffsets *offsets)
 {
    m_upsample_taps = new float[m_num_taps];
    GenTaps(m_upsample_taps, m_num_taps, 3.0f, 24.0f, false); 
@@ -86,7 +97,7 @@ FocusMapSparse2::Calculate(FocusOffsets *offsets)
 }
 
 err 
-FocusMapSparse2::Run(Frame *f, uint32 thread_id)
+FocusMapSparseMulti::Run(Frame *f, uint32 thread_id)
 {
    if (m_channels != f->GetNumChannels())
    {
@@ -95,40 +106,25 @@ FocusMapSparse2::Run(Frame *f, uint32 thread_id)
       return OUTOFRANGE;
    }
 
+   //printf("Beamforming tid: %u, frame: %u\n", thread_id, f->GetFrameID());
+
    float sum = 0;
    float *out = f->GetFocusBuffer();
    uint8 **data = f->GetChannelData();
    SampleData *sd = m_sample_map;
 
-   //memset(out, 0x00, m_total_samples * sizeof(float));
-   //for (uint32 c = 0; c < m_channels; c++)
-   //{
-   //   sd = m_sample_map;
-   //   out = f->GetFocusBuffer();
-   //   for (uint32 s = 0; s < m_total_samples; s++)
-   //   {
-   //      sum = 0;
-   //      if (LIKELY(sd->interpolate[c]))
-   //      {
-   //         uint32 tap = sd->weight_offset[c];
-   //         uint32 sample = sd->sample[c];
-   //         for (uint32 s = 0; s < sd->num_samples; s++)
-   //         {
-   //            sum += (float)(signed char)(data[c][sample++]) * 
-   //                   m_upsample_taps[tap]; 
-   //            tap += m_upsample_factor;
-   //         }
-   //      }
-   //      else
-   //      {
-   //         sum += (float)(signed char)data[c][sd->sample[c]];
-   //      }
-   //      *out++ += sum;
-   //      sd++;
-   //   }
-   //}
+   const uint32 start_vector = m_vectors / m_num_threads * thread_id;
+   const uint32 num_vectors = m_vectors / m_num_threads;
 
-   for (uint32 s = 0; LIKELY(s < m_total_out_samples); s++)
+   const uint32 start_sample = start_vector * m_out_samples;
+   const uint32 end_sample = start_sample + (num_vectors * m_out_samples) - 1;
+  
+   out += start_sample;
+   sd  += start_sample;
+    
+   //printf("tid: %u, start: %u, end: %u\n", thread_id, start_sample, end_sample);
+
+   for (uint32 s = start_sample; LIKELY(s < end_sample); s++)
    {
       sum = 0;
       for (uint32 c = 0; LIKELY(c < sd->channels); c++)

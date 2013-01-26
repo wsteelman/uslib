@@ -9,25 +9,11 @@ namespace uslib
 class ImageTask
 {
 public: 
-   ImageTask() : m_next(NULL) { }
+   ImageTask() { }
    
    ~ImageTask() { }
 
-   virtual err Run(Frame *f) = 0;
-
-   err SetNext(ImageTask *next)
-   {
-      m_next = next;
-      return SUCCESS;
-   }
-
-   ImageTask *Next() const
-   {
-      return m_next;
-   }
-
-private:
-   ImageTask *m_next;
+   virtual err Run(Frame *f, uint32 thread_id) = 0;
 
 }; // class ImageTask
 } // namespace uslibk

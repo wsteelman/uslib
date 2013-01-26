@@ -103,7 +103,7 @@ SectorImageMapF2::CalculateMap(SectorTransducer *t, uint32 samples, uint32 vecto
 }
 
 err
-SectorImageMapF2::Run(Frame *f)
+SectorImageMapF2::Run(Frame *f, uint32 thread_id)
 {
    f->SetDisplaySize(m_width, m_height);
    err rc = Envelope(f);

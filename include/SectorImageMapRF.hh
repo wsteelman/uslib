@@ -28,7 +28,7 @@ public:
  
    ~SectorImageMapRF();
 
-   err Run(Frame *f);
+   err Run(Frame *f, uint32 thread_id);
 
    err CalculateMap(SectorTransducer *t);
 

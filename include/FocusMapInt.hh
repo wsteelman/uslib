@@ -18,7 +18,7 @@ public:
 
    virtual err Calculate(FocusOffsets *offsets);
     
-   virtual err Run(Frame *f);
+   virtual err Run(Frame *f, uint32 thread_id);
 
 private:
    err UpsampleVector(uint8 *in, float* out);

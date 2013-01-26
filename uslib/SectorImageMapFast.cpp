@@ -163,7 +163,7 @@ SectorImageMapFast::EnvelopePixelF(uint32 sample, float *data)
 
 
 err
-SectorImageMapFast::Run(Frame *f)
+SectorImageMapFast::Run(Frame *f, uint32 thread_id)
 {
    f->SetDisplaySize(m_width, m_height);
    int i;
