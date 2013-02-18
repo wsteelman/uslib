@@ -7,6 +7,7 @@
 #include "Utils.hh"
 #include "FrameGenerator.hh"
 #include "FrameList.hh"
+#include "Transducer.hh"
 
 namespace uslib
 {
@@ -23,7 +24,10 @@ FrameGenerator::FrameGenerator(uint32 frame_cnt,
                                uint32 samples,
                                uint32 channels,
                                FrameList *free_list,
-                               FrameRing *ring) :
+                               FrameRing *ring,
+                               FocusOffsets *map,
+                               uint8 *data,
+                               uint32 data_cnt) :
    m_frame_idx(0),
    m_frame_cnt(frame_cnt),
    m_vectors(vectors),
@@ -34,7 +38,7 @@ FrameGenerator::FrameGenerator(uint32 frame_cnt,
    m_running(false)
 {
    m_data = new uint8[frame_cnt * vectors * samples * channels]; 
-   Generate();
+   Generate(data, data_cnt, map);
 }
 
 FrameGenerator::~FrameGenerator()
@@ -44,15 +48,37 @@ FrameGenerator::~FrameGenerator()
 }
 
 void
-FrameGenerator::Generate()
+FrameGenerator::Generate(uint8 *data, uint32 data_cnt, FocusOffsets *map)
 {
    uint8 *buf = m_data;
-   for (uint32 x = 0; x < m_frame_cnt; x++)
+   uint32 frame_size = m_vectors*m_samples;     
+ 
+   if (data == NULL || data_cnt == 0)
    {
-      for (uint32 c = 0; c < m_channels; c++)
+      for (uint32 x = 0; x < m_frame_cnt; x++)
       {
-         GenerateFakeImage(m_vectors, m_samples, buf, x);
-         buf += m_vectors * m_samples * sizeof(uint8);
+         for (uint32 c = 0; c < m_channels; c++)
+         {
+            GenerateFakeImage(m_vectors, m_samples, buf, x);
+            buf += frame_size;
+         }
+      }
+   }
+   else
+   {
+      uint8 *in = data;
+      for (uint32 f = 0; f < m_frame_cnt; f++)
+      {
+         for (uint32 c = 0; c < m_channels; c++)
+         {
+            UnfocusImage(in, buf, map, m_vectors, m_samples, c);
+            in += frame_size;
+            if (in > (data + frame_size*data_cnt))
+            {
+               in = data;
+            }
+            buf += frame_size;
+         }
       }
    }
 }
@@ -121,7 +147,7 @@ FrameGenerator::Run()
          f->AddChannelData(c, buf);
          buf += m_vectors * m_samples * sizeof(uint8);
       }
-      
+     
       err rc = m_ring->Write(f);
       while (rc == NOMEM)
       {

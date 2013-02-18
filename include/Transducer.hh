@@ -5,6 +5,8 @@
 #include "types.h"
 #include "Point3Df.hh"
 
+#define MAX_ELEMENTS 256
+
 namespace uslib
 {
 
@@ -21,11 +23,10 @@ class Transducer
 {
 public:
    Transducer(uint32 element_cnt, uint32 vectors, uint32 samples,
-              uint32 upsample_factor, double frequency) :
+              double frequency) :
       m_element_cnt(element_cnt),
       m_vectors(vectors),
       m_samples(samples),
-      m_upsample_factor(upsample_factor),
       m_frequency(frequency)
    {
       m_focused = element_cnt > 1;
@@ -46,7 +47,7 @@ public:
       return &m_focus_map;
    }
 
-   virtual err CalculateFocusOffsets() = 0;
+   virtual err CalculateFocusOffsets(uint32 upsample_factor) = 0;
 
    //virtual err GetElementPosition(uint32 index, Point3Df *loc) = 0;
 
@@ -62,11 +63,6 @@ public:
       return m_element_cnt;
    }
       
-   uint32 UpsampleFactor() const
-   {
-      return m_upsample_factor;
-   }
-
    uint32 Vectors() const
    {
       return m_vectors;
@@ -87,7 +83,6 @@ protected:
    uint32 m_element_cnt;
    uint32 m_vectors;
    uint32 m_samples;
-   uint32 m_upsample_factor;
   
    // physical parameters 
    double m_frequency;

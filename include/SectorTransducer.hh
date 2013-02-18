@@ -19,8 +19,8 @@ class SectorTransducer : public Transducer
 {
 public:
    SectorTransducer(uint32 element_cnt, uint32 vectors, uint32 samples,
-                    uint32 upsample_factor, double frequency) :
-      Transducer(element_cnt, vectors, samples, upsample_factor, frequency)
+                    double frequency) :
+      Transducer(element_cnt, vectors, samples, frequency)
    {
 
    }

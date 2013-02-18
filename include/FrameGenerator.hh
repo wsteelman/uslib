@@ -4,6 +4,7 @@
 
 #include "types.h"
 #include "Image.hh"
+#include "Transducer.hh"
 
 namespace uslib
 {
@@ -18,7 +19,10 @@ public:
                   uint32 samples,
                   uint32 channels,
                   FrameList *free_list,
-                  FrameRing *ring);
+                  FrameRing *ring,
+                  FocusOffsets *map,
+                  uint8 *data,
+                  uint32 data_cnt);
 
    ~FrameGenerator();
 
@@ -36,7 +40,7 @@ public:
    err GenerateSingleFrame(FrameRing *output_ring);
 
 private:
-   void Generate();
+   void Generate(uint8 *data, uint32 data_cnt, FocusOffsets *map);
 
    uint32   m_frame_idx; 
    uint32   m_frame_cnt;

@@ -20,7 +20,7 @@ FocusMapSparseMulti::FocusMapSparseMulti(uint32 in_samples,
    m_num_threads(num_threads)
 {
    m_up_samples = m_in_samples * m_upsample_factor;
-   m_num_taps = upsample_factor * 8 - 1;;
+   m_num_taps = upsample_factor * 8 - 1;
    m_sample_map = new SampleData[m_out_samples*m_vectors];
 }
 

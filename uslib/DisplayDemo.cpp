@@ -16,17 +16,22 @@
 #include "FocusMapSparse.hh"
 #include "FocusMapSparse2.hh"
 #include "FocusMapSparseMulti.hh"
+#include "FocusMapSparseMulti2.hh"
 #include "SectorImageMapRF.hh"
 #include "SectorImageMapFast.hh"
 #include "SectorImageMapF2.hh"
 #include "Utils.hh"
 #include "FakeTransducer.hh"
+#include "AnnularFlatTransducer.hh"
+#include "perf.hh"
 
 using namespace std;
 using namespace uslib;
 
 #define MAX_RT_PRIO 90 
 
+#define PERF_TEST          1
+#define SUB_CNT            10
 #define SPEED_OF_SOUND     1.54 // mm/us
 //#define RAW_SAMPLES        8192
 //#define INT_SAMPLES        2048
@@ -177,6 +182,43 @@ void mouse(int button, int state, int x, int y)
 
 }
 
+void SaveFrame(const char *filename, uint32 pipeline)
+{
+   // stop generator and drain
+   g_generator->Stop();
+   // draing queue
+   Frame *f = NULL;
+   while (g_free_list->GetCount() < 100)
+   {
+      err rc = g_output_ring->Read(&f);
+      if (rc == SUCCESS)
+      {
+         g_free_list->ReplaceFrame(f);
+      }
+   }
+
+   FrameRing *input_ring = g_factory->GetInputRing(pipeline);
+   FrameRing *output_ring = g_factory->GetOutputRing(pipeline);
+
+   FILE *file = fopen(filename, "wb");
+   if (file == NULL)
+   {
+      return;
+   }
+
+   g_generator->GenerateSingleFrame(input_ring);
+   f = NULL;
+   err rc = output_ring->Read(&f);
+   while (rc != SUCCESS)
+   {
+      rc = output_ring->Read(&f);
+   }
+   fwrite(f->GetDisplayBuffer(), sizeof(uint8),
+          f->GetDisplayWidth() * f->GetDisplayHeight(), file);
+   fclose(file);
+   g_free_list->ReplaceFrame(f);
+}
+
 void RunPerformanceTest(uint32 pipeline, uint32 num_frames, double *results)
 {
    // stop generator and drain
@@ -203,8 +245,7 @@ void RunPerformanceTest(uint32 pipeline, uint32 num_frames, double *results)
    for (uint32 x = 0; x < num_frames; x++)
    { 
       start = ntime();
-      const uint32 sub_cnt = 10;
-      for (uint32 y = 0; y < sub_cnt; y++)
+      for (uint32 y = 0; y < SUB_CNT; y++)
       {
          g_generator->GenerateSingleFrame(input_ring);
          Frame *f = NULL;
@@ -216,9 +257,9 @@ void RunPerformanceTest(uint32 pipeline, uint32 num_frames, double *results)
          g_free_list->ReplaceFrame(f);
       }
       end = ntime();
-      results[x] = (end - start) / (double) sub_cnt;
-      //printf("Processed Frame %u\n", f->GetFrameID());
+      results[x] = (end - start) / (double) SUB_CNT;
    }
+ 
 }
 
 void ComputeStats(double *data, uint32 count, double *mean, double *std)
@@ -278,16 +319,23 @@ void InitPipelines(SectorTransducer *t, uint32 RAW_SAMPLES, uint32 INT_SAMPLES, 
 
    g_factory->InitializePipeline(1, &id);
    g_factory->AddImageTask(id, 0, fmap_sparse2);
+   //g_factory->AddImageTask(id, 0, fast_map2);
    g_SPARSE_PIPELINE = id;
 
-   //g_factory->InitializePipeline(5, &id); 
-   //g_factory->AddImageTask(id, 1, fmap_sparse_4stage);
-   //g_factory->AddImageTask(id, 2, fmap_sparse_4stage);
-   //g_factory->AddImageTask(id, 3, fmap_sparse_4stage);
-   //g_factory->AddImageTask(id, 4, fmap_sparse_4stage);
-   //g_factory->AddImageTask(id, 5, fast_map2);
-   //g_SPARSE_STAGED_PIPELINE = id;
-   g_SPARSE_STAGED_PIPELINE = 0;
+   if (!PERF_TEST)
+   {
+      g_factory->InitializePipeline(5, &id); 
+      g_factory->AddImageTask(id, 0, fmap_sparse_4stage);
+      g_factory->AddImageTask(id, 1, fmap_sparse_4stage);
+      g_factory->AddImageTask(id, 2, fmap_sparse_4stage);
+      g_factory->AddImageTask(id, 3, fmap_sparse_4stage);
+      g_factory->AddImageTask(id, 4, fast_map2);
+      g_SPARSE_STAGED_PIPELINE = id;
+   } 
+   else 
+   {  
+      g_SPARSE_STAGED_PIPELINE = 0;
+   }
 }
 
 void usage(char *prog)
@@ -301,6 +349,7 @@ void usage(char *prog)
           \n\t-c channels          : number of channels\
           \n\t-f frames            : number of frames\
           \n\t-t test frames       : number of frames for performance test\
+          \n\t-i input file        : input file\
           \n\t-h                   : print this help message\n",prog);
   return;
 }
@@ -316,9 +365,10 @@ int main(int argc, char **argv)
    uint32 RAW_SIZE         = RAW_SAMPLES * VECTORS;
    uint32 UPSAMPLE_FACTOR  = 4; 
    uint32 NUM_CHANNELS     = 6;
-   uint32 FRAMES           = 32;
+   uint32 FRAMES           = 2;
    uint32 TEST_FRAMES      = 100;
-   while ((c = getopt(argc, argv, "s:v:x:u:c:f:t:")) != -1)
+   char *filename          = NULL;
+   while ((c = getopt(argc, argv, "s:v:x:u:c:f:t:i:")) != -1)
    {
       switch (c)
       {
@@ -351,6 +401,10 @@ int main(int argc, char **argv)
       case 't':
          TEST_FRAMES = atoi(optarg);
          break;
+      
+      case 'i':
+         filename = optarg;
+         break;
    
       case 'h':
          usage((char*)argv[0]);
@@ -370,65 +424,120 @@ int main(int argc, char **argv)
                                0, IMG_WIDTH * IMG_HEIGHT);
    
    FakeTransducer *t = new FakeTransducer(NUM_CHANNELS, VECTORS, RAW_SAMPLES, 
-                                          UPSAMPLE_FACTOR, 1.0);
-  
+                                          1.0);
+   t->CalculateFocusOffsets(UPSAMPLE_FACTOR);
+
+   AnnularFlatParameters afp; 
+   afp.element_cnt         = NUM_CHANNELS;
+   afp.vectors             = VECTORS;
+   afp.samples             = RAW_SAMPLES;
+   afp.sample_rate         = 24.0;
+   afp.frequency           = 1.0;
+   afp.sector_degrees      = 180.0;
+   afp.transducer_height   = 7.43;
+   afp.probe_radius        = 10.93;
+   for (uint32 r = 0; r < NUM_CHANNELS; r++)
+   {
+      afp.radii[r]         = (double)r * 1.5;
+   } 
+   AnnularFlatTransducer *aft = new AnnularFlatTransducer(afp);
+   aft->CalculateFocusOffsets(UPSAMPLE_FACTOR);
+ 
    InitPipelines(t, RAW_SAMPLES, INT_SAMPLES, VECTORS, NUM_CHANNELS, UPSAMPLE_FACTOR);
+
+   uint8 *file_img = NULL;
+   if (filename != NULL)
+   {
+      file_img = new uint8[VECTORS * RAW_SAMPLES];
+      FILE *in_file = fopen(filename, "rb");
+      if (in_file != NULL)
+      {
+         fread(file_img, sizeof(uint8), VECTORS*RAW_SAMPLES, in_file);
+         fclose(in_file); 
+      }
+      else
+      {
+         printf("Error loading file %s\n", filename);
+      }
+   }
  
    g_generator = new FrameGenerator(FRAMES, VECTORS, RAW_SAMPLES, NUM_CHANNELS, g_free_list, 
-                                    g_factory->GetInputRing(g_SPARSE_STAGED_PIPELINE));
+                                    g_factory->GetInputRing(g_SPARSE_STAGED_PIPELINE),
+                                    t->GetFocusOffsets(), file_img, 1);
 
 
    g_output_ring = g_factory->GetOutputRing(g_SPARSE_STAGED_PIPELINE);
    
    g_factory->Start();
 
-   // run some perf tests
-   double fft_results[TEST_FRAMES];
-   double sparse_results[TEST_FRAMES];
-   double mean, std;
-
-   RunPerformanceTest(g_FFT_PIPELINE, TEST_FRAMES, fft_results);
-   RunPerformanceTest(g_SPARSE_PIPELINE, TEST_FRAMES, sparse_results);
- 
-   ComputeStats(fft_results, TEST_FRAMES, &mean, &std);
-   printf("FFT Pipeline - Mean time: %f ms, STD: %f ms, %f frames/s\n", 
-          mean, std, 1000.0/mean);
-
-   ComputeStats(sparse_results, TEST_FRAMES, &mean, &std);
-   printf("Sparse Pipeline - Mean time: %f ms, STD: %f ms, %f frames/s\n", 
-          mean, std, 1000.0/mean);
-
-   // compute speedup
-   double speedup[TEST_FRAMES];
-   memset(speedup, 0x00, sizeof(speedup));
-   for (uint32 x = 0; x < TEST_FRAMES; x++)
+   if (PERF_TEST)
    {
-      speedup[x] = fft_results[x] / sparse_results[x];
+      // run some perf tests
+      double fft_results[TEST_FRAMES];
+      double sparse_results[TEST_FRAMES];
+      double mean, std;
+
+      //SaveFrame("fft.raw", g_FFT_PIPELINE);
+      //SaveFrame("sparse.raw", g_SPARSE_PIPELINE);
+      //printf("Saved frames...\n");
+
+      RunPerformanceTest(g_FFT_PIPELINE, TEST_FRAMES, fft_results);
+      RunPerformanceTest(g_SPARSE_PIPELINE, TEST_FRAMES, sparse_results);
+
+#ifdef CYCLE_PERF
+   float freq = (float)GetPerformanceFrequency();
+   printf("fft perf: %lu => %f, ifft perf: %lu => %f, sum perf %lu => %f\n",
+          g_fft_cycles/(TEST_FRAMES*SUB_CNT),  ((float)g_fft_cycles)/freq/(float)(TEST_FRAMES*SUB_CNT),
+          g_ifft_cycles/(TEST_FRAMES*SUB_CNT), ((float)g_ifft_cycles)/freq/(float)(TEST_FRAMES*SUB_CNT),
+          g_sum_cycles/(TEST_FRAMES*SUB_CNT),  ((float)g_sum_cycles)/freq/(float)(TEST_FRAMES*SUB_CNT));
+   printf("Est FFT frame rate: %f\n", 
+          1.0f / (((float)g_total_cycles)/freq/(float)(TEST_FRAMES*SUB_CNT)));
+
+   printf("sparse perf: %lu => %f, no up perf: %lu => %f\n",
+          g_sparse_up_cycles/(TEST_FRAMES*SUB_CNT),  ((float)g_sparse_up_cycles)/freq/(float)(TEST_FRAMES*SUB_CNT),
+          g_sparse_noup_cycles/(TEST_FRAMES*SUB_CNT), ((float)g_sparse_noup_cycles)/freq/(float)(TEST_FRAMES*SUB_CNT) );
+#endif 
+ 
+      ComputeStats(fft_results, TEST_FRAMES, &mean, &std);
+      printf("FFT Pipeline - Mean time: %f ms, STD: %f ms, %f frames/s\n", 
+             mean, std, 1000.0/mean);
+
+      ComputeStats(sparse_results, TEST_FRAMES, &mean, &std);
+      printf("Sparse Pipeline - Mean time: %f ms, STD: %f ms, %f frames/s\n", 
+             mean, std, 1000.0/mean);
+
+      // compute speedup
+      double speedup[TEST_FRAMES];
+      memset(speedup, 0x00, sizeof(speedup));
+      for (uint32 x = 0; x < TEST_FRAMES; x++)
+      {
+         speedup[x] = fft_results[x] / sparse_results[x];
+      }
+      ComputeStats(speedup, TEST_FRAMES, &mean, &std);
+      printf("Speedup - Mean: %f, STD: %f\n", mean, std);
    }
-   ComputeStats(speedup, TEST_FRAMES, &mean, &std);
-   printf("Speedup - Mean: %f, STD: %f\n", mean, std);
+   else
+   {
+      printf("Running image pipeline %u\n", g_SPARSE_STAGED_PIPELINE);
+      g_generator->Start();
+      g_perf_cnt = 0;
+      g_timebase = 0;
+      g_fps = 0.0f;
 
-/* 
-   printf("Running Pipeline %u...\n", IMAGE_PIPELINE);
-   g_generator->Start();
-   g_perf_cnt = 0;
-   g_timebase = 0;
-   g_fps = 0.0f;
-
-   glutInit(&argc, argv);
-   glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB);
-   glutInitWindowSize(512,512);
-   glutInitWindowPosition(100,100);
-   glutCreateWindow(argv[0]);
-   
-   glutDisplayFunc(display);
-   glutReshapeFunc(reshape);
-   glutKeyboardFunc(keyboard);
-   glutMouseFunc(mouse);
-   glutSpecialFunc(specialkeys);
-   glutIdleFunc(ImageGen); 
-   glutMainLoop();
-*/
+      glutInit(&argc, argv);
+      glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB);
+      glutInitWindowSize(512,512);
+      glutInitWindowPosition(100,100);
+      glutCreateWindow(argv[0]);
+      
+      glutDisplayFunc(display);
+      glutReshapeFunc(reshape);
+      glutKeyboardFunc(keyboard);
+      glutMouseFunc(mouse);
+      glutSpecialFunc(specialkeys);
+      glutIdleFunc(ImageGen); 
+      glutMainLoop();
+   }
    g_generator->Stop();
    g_factory->Stop();
 
@@ -443,5 +552,6 @@ int main(int argc, char **argv)
    delete g_factory;
    delete g_generator;
    delete g_free_list;
+   delete [] file_img;
    return 0;
 }

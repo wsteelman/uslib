@@ -151,18 +151,11 @@ SectorImageMapF2::Envelope(Frame *f)
             {
                tmp += tmp_vector[index+t] * m_envelope_taps[t];
             }
-            if (tmp > 255.0f)
-            {
-               *out++ = 255.0f;
-            }
-            else if(tmp < 0.0f)
-            {
-               *out++ = 0.0f;
-            }
-            else
-            {
-               *out++ = tmp;
-            }
+            //if (tmp > 127.0f)
+            //{
+            //   tmp = 127.0f;
+            //} 
+            *out++ = 2.0*tmp;
          }
          index++; 
          sample++;

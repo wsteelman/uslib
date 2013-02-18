@@ -6,7 +6,7 @@
 
 #define SPEED_OF_SOUND     1.54 // mm/us
 #define SAMPLE_RATE        24.0 // MHz
-#define ANGLE_DEG          100.0
+#define ANGLE_DEG          180.0
 #define ANGLE_RAD          (ANGLE_DEG * PI / 180.0)
 
 #define MM_PER_SAMPLE      ( (1.0/SAMPLE_RATE) * SPEED_OF_SOUND * 0.5)
@@ -25,19 +25,10 @@ class FakeTransducer : public SectorTransducer
 {
 public:
    FakeTransducer(uint32 element_cnt, uint32 vectors, uint32 samples,
-                  uint32 upsample_factor, double frequency) :
-      SectorTransducer(element_cnt, vectors, samples, upsample_factor, frequency)
+                  double frequency) :
+      SectorTransducer(element_cnt, vectors, samples, frequency)
    {
       m_focus_map.map = new uint32*[m_element_cnt];
-      for (uint32 c = 0; c < m_element_cnt; c++)
-      {
-         m_focus_map.map[c] = new uint32[m_samples*m_upsample_factor];
-         for (uint32 s = 0; s < m_samples*m_upsample_factor; s++)
-         {
-            m_focus_map.map[c][s] = s + (rand() % upsample_factor);
-         }
-      }
-
    }
       
    virtual ~FakeTransducer () 
@@ -49,8 +40,28 @@ public:
       delete [] m_focus_map.map;
    }
 
-   virtual err CalculateFocusOffsets()
+   virtual err CalculateFocusOffsets(uint32 upsample_factor)
    {
+      m_focus_map.vectors = m_vectors;
+      m_focus_map.samples = m_samples * upsample_factor;
+      m_focus_map.channels = m_element_cnt;
+
+      uint32 mod_cnt = 0;
+      for (uint32 c = 0; c < m_element_cnt; c++)
+      {
+         m_focus_map.map[c] = new uint32[m_samples*upsample_factor];
+         for (uint32 s = 0; s < m_samples*upsample_factor; s++)
+         {
+            m_focus_map.map[c][s] = s + (rand() % upsample_factor);
+            if ( m_focus_map.map[c][s] % upsample_factor == 0)
+            {
+               mod_cnt++;
+            }
+
+         }
+      }
+      //printf("Fake Percent not interpolated %f\n", (double)mod_cnt / 
+      //         (double)(m_element_cnt*m_samples*upsample_factor));
       return SUCCESS;
    }
 
