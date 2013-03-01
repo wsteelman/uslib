@@ -17,8 +17,8 @@ class FocusMapSparseMulti : public FocusMap
       bool interpolate[MAX_CHANNELS];
       uint32 sample[MAX_CHANNELS];
       uint32 weight_offset[MAX_CHANNELS];
+      uint32 num_samples[MAX_CHANNELS];
       uint32 channels;
-      uint32 num_samples;
    };
 
 

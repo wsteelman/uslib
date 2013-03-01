@@ -49,7 +49,8 @@ FocusMapSparse2::ComputeUpsample(uint32 sample_num, uint32 vector, uint32 taps,
    uint32 half_taps = len/2;
    uint32 mod = sample_num % m_upsample_factor;
 
-   if (mod == 0)
+   if (mod == 0 || 
+       (sample_num < half_taps || sample_num > (m_up_samples - half_taps)) )
    {
       data->num_samples[channel] = 1;
       if ((sample_num/m_upsample_factor) >= m_in_samples)
@@ -63,13 +64,13 @@ FocusMapSparse2::ComputeUpsample(uint32 sample_num, uint32 vector, uint32 taps,
       data->weight_offset[channel] = 0;
       data->interpolate[channel] = false; 
    } 
-   else if (sample_num < half_taps || sample_num > (m_up_samples - half_taps))
-   {
-      data->num_samples[channel] = (taps + m_upsample_factor - 1) / m_upsample_factor;
-      data->sample[channel] = 0; //(m_in_samples * vector) + sample_num / m_upsample_factor;
-      data->weight_offset[channel] = 0;
-      data->interpolate[channel] = true;
-   }
+   //else if (sample_num < half_taps || sample_num > (m_up_samples - half_taps))
+   //{
+   //   data->num_samples[channel] = 1; //(taps + m_upsample_factor - 1) / m_upsample_factor;
+   //   data->sample[channel] = (m_in_samples * vector) + sample_num / m_upsample_factor - 1; // 0;
+   //   data->weight_offset[channel] = 0;
+   //   data->interpolate[channel] = false; //true;
+   //}
    else
    { 
       uint32 offset = m_upsample_factor - mod;
@@ -127,7 +128,7 @@ FocusMapSparse2::Run(Frame *f, uint32 thread_id)
 
    float sum = 0;
    float *out = f->GetFocusBuffer();
-   uint8 **data = f->GetChannelData();
+   Frame::data_type **data = f->GetChannelData();
    SampleData *sd = m_sample_map;
 #ifdef CYCLE_PERF
    uint64 start = GetPerformanceCount();
@@ -145,7 +146,7 @@ FocusMapSparse2::Run(Frame *f, uint32 thread_id)
             uint32 sample = sd->sample[c];
             for (uint32 x = 0; x < sd->num_samples[c]; x++)
             {
-               sum += ((float)((signed char)(data[c][sample++]))) * 
+               sum += ((float)(data[c][sample++])) * 
                       m_upsample_taps[tap]; 
                tap += m_upsample_factor;
 #ifdef CYCLE_PERF
@@ -159,10 +160,18 @@ FocusMapSparse2::Run(Frame *f, uint32 thread_id)
             noup++;
             total++;
 #endif 
-            sum += (float)((signed char)data[c][sd->sample[c]]);
+            sum += (float)(data[c][sd->sample[c]]);
          }
       }
       sum =  sum / (float)sd->channels;
+      //if (sum > 127.0f)
+      //{
+      //   sum = 127.0f;
+      //}
+      //else if (sum < -128.0f)
+      //{
+      //   sum = -128.0f;
+      //}
       *out++ = sum;
       sd++; 
    } 
@@ -171,7 +180,7 @@ FocusMapSparse2::Run(Frame *f, uint32 thread_id)
    g_sparse_noup_cycles += (diff * noup) / total;
    g_sparse_up_cycles += (diff * (total-noup)) / total;
 #endif
-
+   
    return SUCCESS;
 
 }

@@ -33,7 +33,7 @@ public:
 private:
    inline float FocusPixel(uint32 *samples, float *weights,
                     uint32 channels, uint32 num_samples,
-                    uint8 **data);
+                    Frame::data_type **data);
   
    err ComputeSampleData(FocusOffsets *map, uint32 sample_num, 
                          uint32 vector, uint32 taps,

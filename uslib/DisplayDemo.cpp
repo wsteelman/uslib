@@ -58,6 +58,8 @@ uint32          g_perf_cnt;
 int             g_timebase;
 float           g_fps;
 char            g_fps_char[16];
+SectorTransducer     *g_t;
+float          *g_focused[10];
 
 // returns true if failed
 //inline bool SetThreadPrio(int prio)
@@ -117,7 +119,7 @@ void ImageGen()
                 f->GetDisplayBuffer());
    g_perf_cnt++;
    int time = glutGet(GLUT_ELAPSED_TIME);
-   if (time - g_timebase > 2000)
+   if (time - g_timebase > 5000)
    {
       g_fps = (float)g_perf_cnt*1000.0f/(float)(time-g_timebase);
       g_timebase = time;
@@ -213,6 +215,7 @@ void SaveFrame(const char *filename, uint32 pipeline)
    {
       rc = output_ring->Read(&f);
    }
+   g_focused[pipeline] = f->GetFocusBuffer();
    fwrite(f->GetDisplayBuffer(), sizeof(uint8),
           f->GetDisplayWidth() * f->GetDisplayHeight(), file);
    fclose(file);
@@ -283,7 +286,7 @@ void ComputeStats(double *data, uint32 count, double *mean, double *std)
 }
 
 void InitPipelines(SectorTransducer *t, uint32 RAW_SAMPLES, uint32 INT_SAMPLES, uint32 VECTORS,
-                   uint32 NUM_CHANNELS, uint32 UPSAMPLE_FACTOR)
+                   uint32 NUM_CHANNELS, uint32 UPSAMPLE_FACTOR, uint32 stages)
 {
 
    FocusMapInt *fmap_int = new FocusMapInt(RAW_SAMPLES, INT_SAMPLES, VECTORS, 
@@ -299,12 +302,8 @@ void InitPipelines(SectorTransducer *t, uint32 RAW_SAMPLES, uint32 INT_SAMPLES, 
    fmap_sparse2->Calculate(t->GetFocusOffsets());
 
    FocusMapSparseMulti *fmap_sparse_4stage = new FocusMapSparseMulti(RAW_SAMPLES, INT_SAMPLES, VECTORS, 
-                                                       UPSAMPLE_FACTOR, NUM_CHANNELS, 4);
+                                                       UPSAMPLE_FACTOR, NUM_CHANNELS, stages);
    fmap_sparse_4stage->Calculate(t->GetFocusOffsets());
-
-   FocusMapSparseMulti *fmap_sparse_3stage = new FocusMapSparseMulti(RAW_SAMPLES, INT_SAMPLES, VECTORS, 
-                                                       UPSAMPLE_FACTOR, NUM_CHANNELS, 3);
-   fmap_sparse_3stage->Calculate(t->GetFocusOffsets());
 
    SectorImageMapFast *fast_map0 = new SectorImageMapFast("Fast", IMG_WIDTH, IMG_HEIGHT);
    fast_map0->CalculateMap(t, INT_SAMPLES, VECTORS);
@@ -324,12 +323,12 @@ void InitPipelines(SectorTransducer *t, uint32 RAW_SAMPLES, uint32 INT_SAMPLES, 
 
    if (!PERF_TEST)
    {
-      g_factory->InitializePipeline(5, &id); 
-      g_factory->AddImageTask(id, 0, fmap_sparse_4stage);
-      g_factory->AddImageTask(id, 1, fmap_sparse_4stage);
-      g_factory->AddImageTask(id, 2, fmap_sparse_4stage);
-      g_factory->AddImageTask(id, 3, fmap_sparse_4stage);
-      g_factory->AddImageTask(id, 4, fast_map2);
+      g_factory->InitializePipeline(stages+1, &id); 
+      for (uint32 x = 0; x < stages; x++)
+      {
+         g_factory->AddImageTask(id, x, fmap_sparse_4stage);
+      }
+      g_factory->AddImageTask(id, stages, fast_map2);
       g_SPARSE_STAGED_PIPELINE = id;
    } 
    else 
@@ -350,6 +349,7 @@ void usage(char *prog)
           \n\t-f frames            : number of frames\
           \n\t-t test frames       : number of frames for performance test\
           \n\t-i input file        : input file\
+          \n\t-p pipeline stage    : number of pipline stages used for beamforming\
           \n\t-h                   : print this help message\n",prog);
   return;
 }
@@ -367,8 +367,9 @@ int main(int argc, char **argv)
    uint32 NUM_CHANNELS     = 6;
    uint32 FRAMES           = 2;
    uint32 TEST_FRAMES      = 100;
+   uint32 STAGES           = 4;
    char *filename          = NULL;
-   while ((c = getopt(argc, argv, "s:v:x:u:c:f:t:i:")) != -1)
+   while ((c = getopt(argc, argv, "s:v:x:u:c:f:t:i:p:")) != -1)
    {
       switch (c)
       {
@@ -405,7 +406,11 @@ int main(int argc, char **argv)
       case 'i':
          filename = optarg;
          break;
-   
+ 
+      case 'p':
+         STAGES = atoi(optarg);
+         break;
+ 
       case 'h':
          usage((char*)argv[0]);
          exit(1);
@@ -442,17 +447,19 @@ int main(int argc, char **argv)
    } 
    AnnularFlatTransducer *aft = new AnnularFlatTransducer(afp);
    aft->CalculateFocusOffsets(UPSAMPLE_FACTOR);
- 
-   InitPipelines(t, RAW_SAMPLES, INT_SAMPLES, VECTORS, NUM_CHANNELS, UPSAMPLE_FACTOR);
 
-   uint8 *file_img = NULL;
+   g_t = aft;
+ 
+   InitPipelines(g_t, RAW_SAMPLES, INT_SAMPLES, VECTORS, NUM_CHANNELS, UPSAMPLE_FACTOR, STAGES);
+
+   Frame::data_type *file_img = NULL;
    if (filename != NULL)
    {
-      file_img = new uint8[VECTORS * RAW_SAMPLES];
+      file_img = new Frame::data_type[VECTORS * RAW_SAMPLES];
       FILE *in_file = fopen(filename, "rb");
       if (in_file != NULL)
       {
-         fread(file_img, sizeof(uint8), VECTORS*RAW_SAMPLES, in_file);
+         fread(file_img, sizeof(Frame::data_type), VECTORS*RAW_SAMPLES, in_file);
          fclose(in_file); 
       }
       else
@@ -463,7 +470,7 @@ int main(int argc, char **argv)
  
    g_generator = new FrameGenerator(FRAMES, VECTORS, RAW_SAMPLES, NUM_CHANNELS, g_free_list, 
                                     g_factory->GetInputRing(g_SPARSE_STAGED_PIPELINE),
-                                    t->GetFocusOffsets(), file_img, 1);
+                                    g_t->GetFocusOffsets(), file_img, 1);
 
 
    g_output_ring = g_factory->GetOutputRing(g_SPARSE_STAGED_PIPELINE);
@@ -477,34 +484,72 @@ int main(int argc, char **argv)
       double sparse_results[TEST_FRAMES];
       double mean, std;
 
-      //SaveFrame("fft.raw", g_FFT_PIPELINE);
-      //SaveFrame("sparse.raw", g_SPARSE_PIPELINE);
-      //printf("Saved frames...\n");
+      SaveFrame("fft.raw", g_FFT_PIPELINE);
+      SaveFrame("sparse.raw", g_SPARSE_PIPELINE);
+      
+      FILE *f1 = fopen("sparse.rf", "wb");
+      if (f1 != NULL)
+      {
+         Frame::data_type *tmp = new Frame::data_type[VECTORS*INT_SAMPLES];
+         for (uint32 x = 0; x < VECTORS*INT_SAMPLES; x++)
+         {
+            tmp[x] = (Frame::data_type)(g_focused[g_SPARSE_PIPELINE][x]);
+         }
+         fwrite(tmp, sizeof(Frame::data_type), VECTORS*INT_SAMPLES, f1);
+         fclose(f1);
+         delete [] tmp;
+      }
+
+      FILE *f2 = fopen("fft.rf", "wb");
+      if (f2 != NULL)
+      {
+         Frame::data_type *tmp = new Frame::data_type[VECTORS*INT_SAMPLES];
+         for (uint32 x = 0; x < VECTORS*INT_SAMPLES; x++)
+         {
+            tmp[x] = (Frame::data_type)(g_focused[g_FFT_PIPELINE][x]);
+         }
+         fwrite(tmp, sizeof(Frame::data_type), VECTORS*INT_SAMPLES, f2);
+         fclose(f2);
+         delete [] tmp;
+      }
+
+      printf("Saved frames...\n");
 
       RunPerformanceTest(g_FFT_PIPELINE, TEST_FRAMES, fft_results);
       RunPerformanceTest(g_SPARSE_PIPELINE, TEST_FRAMES, sparse_results);
 
-#ifdef CYCLE_PERF
-   float freq = (float)GetPerformanceFrequency();
-   printf("fft perf: %lu => %f, ifft perf: %lu => %f, sum perf %lu => %f\n",
-          g_fft_cycles/(TEST_FRAMES*SUB_CNT),  ((float)g_fft_cycles)/freq/(float)(TEST_FRAMES*SUB_CNT),
-          g_ifft_cycles/(TEST_FRAMES*SUB_CNT), ((float)g_ifft_cycles)/freq/(float)(TEST_FRAMES*SUB_CNT),
-          g_sum_cycles/(TEST_FRAMES*SUB_CNT),  ((float)g_sum_cycles)/freq/(float)(TEST_FRAMES*SUB_CNT));
-   printf("Est FFT frame rate: %f\n", 
-          1.0f / (((float)g_total_cycles)/freq/(float)(TEST_FRAMES*SUB_CNT)));
+      printf("%u\t%u\t",  UPSAMPLE_FACTOR, RAW_SAMPLES);
 
-   printf("sparse perf: %lu => %f, no up perf: %lu => %f\n",
-          g_sparse_up_cycles/(TEST_FRAMES*SUB_CNT),  ((float)g_sparse_up_cycles)/freq/(float)(TEST_FRAMES*SUB_CNT),
-          g_sparse_noup_cycles/(TEST_FRAMES*SUB_CNT), ((float)g_sparse_noup_cycles)/freq/(float)(TEST_FRAMES*SUB_CNT) );
+#ifdef CYCLE_PERF
+   //float freq = (float)GetPerformanceFrequency();
+   printf("%lu\t%lu\t%lu\t", 
+          g_fft_cycles/(TEST_FRAMES*SUB_CNT), 
+          g_ifft_cycles/(TEST_FRAMES*SUB_CNT), 
+          g_sum_cycles/(TEST_FRAMES*SUB_CNT));
+   printf("%lu\t%lu\t", 
+          g_sparse_up_cycles/(TEST_FRAMES*SUB_CNT),
+          g_sparse_noup_cycles/(TEST_FRAMES*SUB_CNT));
+
+   printf("%lu\t%lu\t", 
+          g_total_cycles/(TEST_FRAMES*SUB_CNT), 
+          (g_sparse_up_cycles + g_sparse_noup_cycles)/(TEST_FRAMES*SUB_CNT));
+   //printf("fft perf: %lu => %f, ifft perf: %lu => %f, sum perf %lu => %f\n",
+   //       g_fft_cycles/(TEST_FRAMES*SUB_CNT),  ((float)g_fft_cycles)/freq/(float)(TEST_FRAMES*SUB_CNT),
+   //       g_ifft_cycles/(TEST_FRAMES*SUB_CNT), ((float)g_ifft_cycles)/freq/(float)(TEST_FRAMES*SUB_CNT),
+   //       g_sum_cycles/(TEST_FRAMES*SUB_CNT),  ((float)g_sum_cycles)/freq/(float)(TEST_FRAMES*SUB_CNT));
+   //printf("Est FFT frame rate: %f\n", 
+   //       1.0f / (((float)g_total_cycles)/freq/(float)(TEST_FRAMES*SUB_CNT)));
+
+   //printf("sparse perf: %lu => %f, no up perf: %lu => %f\n",
+   //       g_sparse_up_cycles/(TEST_FRAMES*SUB_CNT),  ((float)g_sparse_up_cycles)/freq/(float)(TEST_FRAMES*SUB_CNT),
+   //       g_sparse_noup_cycles/(TEST_FRAMES*SUB_CNT), ((float)g_sparse_noup_cycles)/freq/(float)(TEST_FRAMES*SUB_CNT) );
 #endif 
  
       ComputeStats(fft_results, TEST_FRAMES, &mean, &std);
-      printf("FFT Pipeline - Mean time: %f ms, STD: %f ms, %f frames/s\n", 
-             mean, std, 1000.0/mean);
+      printf("%f\t", 1000.0/mean);
 
       ComputeStats(sparse_results, TEST_FRAMES, &mean, &std);
-      printf("Sparse Pipeline - Mean time: %f ms, STD: %f ms, %f frames/s\n", 
-             mean, std, 1000.0/mean);
+      printf("%f\t", 1000.0/mean);
 
       // compute speedup
       double speedup[TEST_FRAMES];
@@ -514,7 +559,7 @@ int main(int argc, char **argv)
          speedup[x] = fft_results[x] / sparse_results[x];
       }
       ComputeStats(speedup, TEST_FRAMES, &mean, &std);
-      printf("Speedup - Mean: %f, STD: %f\n", mean, std);
+      printf("%f\n", mean);
    }
    else
    {

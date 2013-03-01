@@ -6,6 +6,7 @@
 
 #define SPEED_OF_SOUND     1.54 // mm/us
 #define SAMPLE_RATE        24.0 // MHz
+//#define ANGLE_DEG          100.0
 #define ANGLE_DEG          180.0
 #define ANGLE_RAD          (ANGLE_DEG * PI / 180.0)
 

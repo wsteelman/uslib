@@ -16,10 +16,13 @@
 #define NEG1_64 0xFFFFFFFFFFFFFFFF
 
 typedef uint32_t err;
+typedef signed char int8;
 typedef uint8_t uint8;
 typedef uint32_t uint32;
 typedef unsigned long uint64;
 
 #define PI	3.14159265358979323846
+
+#define RAW_TYPE  float
 
 #endif

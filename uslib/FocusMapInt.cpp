@@ -40,7 +40,7 @@ FocusMapInt::Calculate(FocusOffsets *offsets)
 
 
 err
-FocusMapInt::UpsampleVector(uint8 *in, float* out)
+FocusMapInt::UpsampleVector(Frame::data_type *in, float* out)
 {
    uint32 taps = (m_num_taps / m_upsample_factor) + 1; 
    uint32 len = ((m_num_taps / m_upsample_factor) + 1) * m_upsample_factor; 
@@ -63,7 +63,7 @@ FocusMapInt::UpsampleVector(uint8 *in, float* out)
          for (uint32 t = 0; t < taps; t++)
          { 
             // convert to signed byte, then to float
-            signed char sample = (signed char)(in[sample_offset++]);
+            float sample = (float)(in[sample_offset++]);
             tmp += (float) sample * m_upsample_taps[tap_offset];
             tap_offset += m_upsample_factor;
          }
@@ -98,7 +98,7 @@ FocusMapInt::Run(Frame *f, uint32 thread_id)
    memset(output, 0x00, m_total_out_samples * sizeof(float)); 
    for (uint32 c = 0; c < m_channels; c++)
    {
-      uint8 *chnl = f->GetChannelData(c);
+      Frame::data_type *chnl = f->GetChannelData(c);
       output = f->GetFocusBuffer();
       for (uint32 v = 0; v < m_vectors; v++)
       {

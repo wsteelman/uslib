@@ -10,7 +10,6 @@
 namespace uslib
 {
 
-class Frame;
 class ImageTask;
 class ImageFactory;
 class ImagePipeline;

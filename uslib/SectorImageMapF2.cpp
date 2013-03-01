@@ -151,10 +151,14 @@ SectorImageMapF2::Envelope(Frame *f)
             {
                tmp += tmp_vector[index+t] * m_envelope_taps[t];
             }
-            //if (tmp > 127.0f)
-            //{
-            //   tmp = 127.0f;
-            //} 
+            if (tmp > 127.0f)
+            {
+               tmp = 127.0f;
+            }
+            else if (tmp < -128.0f)
+            {
+               tmp = -128.0f;
+            } 
             *out++ = 2.0*tmp;
          }
          index++; 
@@ -177,7 +181,7 @@ SectorImageMapF2::ScanConvert(Frame *f)
    int i;
 	PixelData* map_ptr;
 	PixelData pmap;
-	uint8 s1,s2;
+	int s1,s2;
 	uint8 * bitmap_ptr;
 	int pixel;
 	int size = m_width * m_height;
@@ -194,8 +198,8 @@ SectorImageMapF2::ScanConvert(Frame *f)
       }
       else
       {
-		   s1		= (uint8)*(in_float + pmap.sample1);
-		   s2		= (uint8)*(in_float + pmap.sample2);
+		   s1		= (int)*(in_float + pmap.sample1);
+		   s2		= (int)*(in_float + pmap.sample2);
          pixel	= (int)((s2 * pmap.weight) + (s1 * (1.0-pmap.weight)));
 		   if(pixel < 1)
 		   {

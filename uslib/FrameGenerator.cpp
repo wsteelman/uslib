@@ -26,7 +26,7 @@ FrameGenerator::FrameGenerator(uint32 frame_cnt,
                                FrameList *free_list,
                                FrameRing *ring,
                                FocusOffsets *map,
-                               uint8 *data,
+                               Frame::data_type *data,
                                uint32 data_cnt) :
    m_frame_idx(0),
    m_frame_cnt(frame_cnt),
@@ -37,7 +37,7 @@ FrameGenerator::FrameGenerator(uint32 frame_cnt,
    m_ring(ring),
    m_running(false)
 {
-   m_data = new uint8[frame_cnt * vectors * samples * channels]; 
+   m_data = new Frame::data_type[frame_cnt * vectors * samples * channels]; 
    Generate(data, data_cnt, map);
 }
 
@@ -48,9 +48,9 @@ FrameGenerator::~FrameGenerator()
 }
 
 void
-FrameGenerator::Generate(uint8 *data, uint32 data_cnt, FocusOffsets *map)
+FrameGenerator::Generate(Frame::data_type *data, uint32 data_cnt, FocusOffsets *map)
 {
-   uint8 *buf = m_data;
+   Frame::data_type *buf = m_data;
    uint32 frame_size = m_vectors*m_samples;     
  
    if (data == NULL || data_cnt == 0)
@@ -66,12 +66,16 @@ FrameGenerator::Generate(uint8 *data, uint32 data_cnt, FocusOffsets *map)
    }
    else
    {
-      uint8 *in = data;
+      Frame::data_type *in = data;
       for (uint32 f = 0; f < m_frame_cnt; f++)
       {
          for (uint32 c = 0; c < m_channels; c++)
          {
-            UnfocusImage(in, buf, map, m_vectors, m_samples, c);
+            //UnfocusImage(in, buf, map, m_vectors, m_samples, c);
+            for (uint32 s = 0; s < m_vectors*m_samples; s++)
+            {
+               buf[s] = in[s]; 
+            }
             in += frame_size;
             if (in > (data + frame_size*data_cnt))
             {
@@ -111,11 +115,11 @@ FrameGenerator::GenerateSingleFrame(FrameRing *output_ring)
       f = m_list->GetFrame(); 
    }
 
-   uint8 *buf = &m_data[m_frame_idx * m_vectors * m_samples * m_channels];
+   Frame::data_type *buf = &m_data[m_frame_idx * m_vectors * m_samples * m_channels];
    for (uint32 c = 0; c < m_channels; c++)
    { 
       f->AddChannelData(c, buf);
-      buf += m_vectors * m_samples * sizeof(uint8);
+      buf += m_vectors * m_samples;
    }
    
    err rc = output_ring->Write(f);
@@ -141,11 +145,11 @@ FrameGenerator::Run()
          }
          f = m_list->GetFrame(); 
       }
-      uint8 *buf = &m_data[m_frame_idx * m_vectors * m_samples * m_channels];
+      Frame::data_type *buf = &m_data[m_frame_idx * m_vectors * m_samples * m_channels];
       for (uint32 c = 0; c < m_channels; c++)
       { 
          f->AddChannelData(c, buf);
-         buf += m_vectors * m_samples * sizeof(uint8);
+         buf += m_vectors * m_samples;
       }
      
       err rc = m_ring->Write(f);

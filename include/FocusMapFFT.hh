@@ -21,7 +21,7 @@ public:
    virtual err Run(Frame *f, uint32 thread_id);
 
 private:
-   inline err UpsampleVector(uint8 *in, double* out);
+   inline err UpsampleVector(Frame::data_type *in, double* out);
 
    uint32         m_up_samples;
    uint32         m_num_taps;

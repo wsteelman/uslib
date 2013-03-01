@@ -21,7 +21,7 @@ public:
                   FrameList *free_list,
                   FrameRing *ring,
                   FocusOffsets *map,
-                  uint8 *data,
+                  Frame::data_type *data,
                   uint32 data_cnt);
 
    ~FrameGenerator();
@@ -40,14 +40,14 @@ public:
    err GenerateSingleFrame(FrameRing *output_ring);
 
 private:
-   void Generate(uint8 *data, uint32 data_cnt, FocusOffsets *map);
+   void Generate(Frame::data_type *data, uint32 data_cnt, FocusOffsets *map);
 
    uint32   m_frame_idx; 
    uint32   m_frame_cnt;
    uint32   m_vectors;
    uint32   m_samples;
    uint32   m_channels; 
-   uint8   *m_data;
+   Frame::data_type  *m_data;
    FrameList *m_list;
    FrameRing *m_ring;
 

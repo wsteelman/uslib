@@ -4,7 +4,9 @@
 #include <math.h>
 #include "types.h"
 #include "Transducer.hh"
+#include "Image.hh"
 #include <fftw3.h>
+
 
 namespace uslib
 {
@@ -50,27 +52,27 @@ inline void GenTaps(float *taps, uint32 num_upsample_taps, float cutoff, float s
    return;
 }
 
-inline void GenerateFakeImage(uint32 vectors, uint32 samples, uint8 *img, uint32 frame)
+inline void GenerateFakeImage(uint32 vectors, uint32 samples, Frame::data_type *img, uint32 frame)
 {
    for (uint32 v = 0; v < vectors; v++)
    {
       uint32 x = 0;
       for(x = 0; x < samples/4; x++)
       {
-         *(img++) = 0x80;
+         *(img++) = 0x40;
       }
 
       if (v > (vectors/2 - 30) && v < (vectors/2 + 30))
       {
          for(x = 0; x < samples/2; x++)
          {
-            if (x > (frame*32 + 500) && x < (frame*32 + 1500))
+            if (x > (frame*32 + 100) && x < (frame*32 + 400))
             {
-               *(img++) = 0x80;
+               *(img++) = 0x40;
             }
             else
             {
-               *(img++) = (uint8)(128 + 64*cos(x*1.0*PI/180.0));
+               *(img++) = (Frame::data_type)(128 + 64*cos(x*1.0*PI/180.0));
             } 
          }
       }
@@ -78,17 +80,17 @@ inline void GenerateFakeImage(uint32 vectors, uint32 samples, uint8 *img, uint32
       {
          for(x = 0; x < samples/2; x++)
          {
-            *(img++) = (uint8)(128 + 64*cos(x*1.0*PI/180.0));
+            *(img++) = (Frame::data_type)(128 + 64*cos(x*1.0*PI/180.0));
          }
       }
       for(x = 0; x < samples/4; x++)
       {
-         *(img++) = 0x80;
+         *(img++) = 0x40;
       }
    }
 }
 
-inline void UnfocusImage(uint8 *in, uint8 *out, FocusOffsets *map, 
+inline void UnfocusImage(Frame::data_type *in, Frame::data_type *out, FocusOffsets *map, 
                   uint32 vectors, uint32 samples, uint32 channel)
 {
    uint32 upsample = map->samples / samples;
@@ -99,47 +101,71 @@ inline void UnfocusImage(uint8 *in, uint8 *out, FocusOffsets *map,
    fftw_plan      fft_plan = fftw_plan_dft_r2c_1d(samples, fft_in, fft_tmp, FFTW_ESTIMATE);   
    fftw_plan      ifft_plan = fftw_plan_dft_c2r_1d(map->samples, fft_tmp, upsample_out, FFTW_ESTIMATE); 
 
+   uint32 rev_map[map->samples];
+   uint32 min = map->map[channel][0];
+   for (uint32 rev_sample = 0; rev_sample < map->samples; rev_sample++)
+   {
+      if (rev_sample < min)
+      {
+         rev_map[rev_sample] = 0;
+      } 
+      int diff = samples;
+      uint32 best = 0;
+      for (uint32 in = 0; in < map->samples; in++)
+      {
+         int tmp = abs((int)rev_sample - (int)map->map[channel][in]);
+         if (tmp < diff)
+         {
+            best = in; 
+            diff = tmp;
+         } 
+      } 
+      rev_map[rev_sample] = best;
+   }
+
+   Frame::data_type *ptr = out;
    for (uint32 v = 0; v < vectors; v++)
    {
       for (uint32 s = 0; s < samples; s++)
       {
-         fft_in[s] = (double)(signed char)(*in++);
+         fft_in[s] = (double)(*in++);
       }
       memset(fft_tmp, 0x00, (map->samples/2+1)*sizeof(fftw_complex));
       fftw_execute_dft_r2c(fft_plan, fft_in, fft_tmp);
       fftw_execute_dft_c2r(ifft_plan, fft_tmp, upsample_out);
-    
-      for (int s = 0; s < (int)map->samples; s+=upsample)
+  
+      for (uint32 s = 0; s < map->samples; s+= upsample)
       { 
-         int idx = s - ((int)map->map[channel][s] - s);
-         if (idx >= (int)map->samples)
-         {
-            idx = 0;
-         }
-         else if (idx < 0)
-         {
-            idx = 0;
-         }
-         double tmp = round(upsample_out[idx] / (double) samples);
+         uint32 idx = rev_map[s];
+         double tmp = upsample_out[idx] / (double) samples;
          if (tmp > 127.0)
          {
-            *out = 127;
+            *ptr = 127;
          } 
          else if (tmp < -128.0)
          {
-            *out = 128;
+            *ptr = 128;
          }
          else
          {
-            *out = (uint8)(signed char)tmp;
+            *ptr = (Frame::data_type)tmp;
          }
-         out++;
+         ptr++;
       }
    }  
 
    fftw_free(upsample_out);
    fftw_free(fft_in);
    fftw_free(fft_tmp);
+
+   char filename[64];
+   sprintf(filename, "channel%u.rf", channel);
+   FILE *file = fopen(filename, "wb");
+   if (file != NULL)
+   {
+      fwrite(out, sizeof(uint8), vectors*samples, file);
+      fclose(file);
+   }
 }
 
 } // namespace uslib

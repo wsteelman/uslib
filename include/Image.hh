@@ -8,19 +8,59 @@
 
 namespace uslib
 {
-class Frame;
+template <class T>
+class Frame_t;
+
+typedef Frame_t<RAW_TYPE> Frame;
 typedef PointerRing<Frame> FrameRing;
 
-class Frame
+//template <class T>
+//struct FrameRing
+//{
+//   typedef PointerRing<Frame<T> > type;
+//}
+
+template <class T>
+class Frame_t
 {
 public:
-   Frame(uint32 id, uint32 num_channels, uint32 image_map_id,
+   typedef T data_type;
+   
+   Frame_t(uint32 id, uint32 num_channels, uint32 image_map_id,
          uint32 vectors, uint32 samples,
-         uint32 max_display_size);
+         uint32 max_display_size) :
+      m_id(id),
+      m_num_channels(num_channels),
+      m_map_id(image_map_id),
+      m_vectors(vectors),
+      m_samples(samples),
+      m_width(0),
+      m_height(0),
+      m_max_display_size(max_display_size),
+      m_display(NULL),
+      m_focused(NULL)
+   {
+      m_channels = new data_type*[num_channels];
+      m_focused = new float[m_samples*m_vectors];
+      m_display = new uint8[m_max_display_size];
+   }
 
-   ~Frame();
+   ~Frame_t()
+   {
+      delete [] m_channels;
+      delete [] m_display;
+   }
 
-   err AddChannelData(uint32 chnl, uint8 *data);
+
+   err AddChannelData(uint32 chnl, T *data)
+   {
+      if (chnl < m_num_channels)
+      {
+         m_channels[chnl] = data;
+         return SUCCESS; 
+      }
+      return OUTOFRANGE;
+   }
 
    void SetDisplaySize(uint32 width, uint32 height)
    {
@@ -63,7 +103,7 @@ public:
       return m_focused;
    }
 
-   uint8 *GetChannelData(uint32 chnl) const
+   T *GetChannelData(uint32 chnl) const
    {
       if (chnl < m_num_channels)
       {
@@ -72,7 +112,7 @@ public:
       return NULL;
    }
 
-   uint8 **GetChannelData() const
+   T **GetChannelData() const
    {
       return m_channels;
    }
@@ -90,7 +130,7 @@ private:
    uint32   m_samples;
    uint32   m_width;
    uint32   m_height;
-   uint8  **m_channels;
+   T      **m_channels;
    uint32   m_max_display_size;
    uint8   *m_display;
    float   *m_focused;

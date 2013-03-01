@@ -110,14 +110,14 @@ FocusMapSparse::Calculate(FocusOffsets *offsets)
 float 
 FocusMapSparse::FocusPixel(uint32 *samples, float *weights,
                                  uint32 channels, uint32 num_samples,
-                                 uint8 **data)
+                                 Frame::data_type **data)
 {
    float sum = 0;
    for (uint32 c = 0; c < channels; c++)
    {
       for (uint32 s = 0; s < num_samples; s++)
       {
-         sum += (float)(signed char)(data[c][*samples++]) * *weights++; 
+         sum += (float)(data[c][*samples++]) * *weights++; 
       }
    }
    return sum / (float)channels;
@@ -135,7 +135,7 @@ FocusMapSparse::Run(Frame *f, uint32 thread_id)
 
    float sum = 0;
    float *out = f->GetFocusBuffer();
-   uint8 **data = f->GetChannelData();
+   Frame::data_type **data = f->GetChannelData();
    SampleData *sd = m_sample_map;
    uint32 *samples;
    float *weights;
@@ -153,7 +153,7 @@ FocusMapSparse::Run(Frame *f, uint32 thread_id)
          weights = sd->weights + (c * sd->num_samples);
          for (uint32 s = 0; s < sd->num_samples; s++)
          {
-            sum += (float)(signed char)(data[c][*samples++]) * *weights++; 
+            sum += (float)(data[c][*samples++]) * *weights++; 
          }
          *out++ += sum / (float) m_channels;
          sd++;

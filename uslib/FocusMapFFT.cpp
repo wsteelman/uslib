@@ -54,7 +54,7 @@ FocusMapFFT::Calculate(FocusOffsets *offsets)
 
 
 err
-FocusMapFFT::UpsampleVector(uint8 *in, double* out)
+FocusMapFFT::UpsampleVector(Frame::data_type *in, double* out)
 {
 #ifdef CYCLE_PERF
    uint64 start = GetPerformanceCount();
@@ -100,7 +100,7 @@ FocusMapFFT::Run(Frame *f, uint32 thread_id)
    memset(output, 0x00, m_total_out_samples * sizeof(float)); 
    for (uint32 c = 0; c < m_channels; c++)
    {
-      uint8 *chnl = f->GetChannelData(c);
+      Frame::data_type *chnl = f->GetChannelData(c);
       output = f->GetFocusBuffer();
       for (uint32 v = 0; v < m_vectors; v++)
       {
@@ -131,6 +131,7 @@ FocusMapFFT::Run(Frame *f, uint32 thread_id)
    g_sum_cycles += GetPerformanceCount() - start;
    g_total_cycles += GetPerformanceCount() - total_start;
 #endif 
+
    return SUCCESS;
 
 }
