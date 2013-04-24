@@ -30,7 +30,7 @@ using namespace uslib;
 
 #define MAX_RT_PRIO 90 
 
-#define PERF_TEST          1
+#define PERF_TEST          0
 #define SUB_CNT            10
 #define SPEED_OF_SOUND     1.54 // mm/us
 //#define RAW_SAMPLES        8192
@@ -365,7 +365,7 @@ int main(int argc, char **argv)
    uint32 RAW_SIZE         = RAW_SAMPLES * VECTORS;
    uint32 UPSAMPLE_FACTOR  = 4; 
    uint32 NUM_CHANNELS     = 6;
-   uint32 FRAMES           = 2;
+   uint32 FRAMES           = 8;
    uint32 TEST_FRAMES      = 100;
    uint32 STAGES           = 4;
    char *filename          = NULL;
@@ -448,7 +448,7 @@ int main(int argc, char **argv)
    AnnularFlatTransducer *aft = new AnnularFlatTransducer(afp);
    aft->CalculateFocusOffsets(UPSAMPLE_FACTOR);
 
-   g_t = aft;
+   g_t = t;
  
    InitPipelines(g_t, RAW_SAMPLES, INT_SAMPLES, VECTORS, NUM_CHANNELS, UPSAMPLE_FACTOR, STAGES);
 
@@ -513,7 +513,7 @@ int main(int argc, char **argv)
          delete [] tmp;
       }
 
-      printf("Saved frames...\n");
+      //printf("Saved frames...\n");
 
       RunPerformanceTest(g_FFT_PIPELINE, TEST_FRAMES, fft_results);
       RunPerformanceTest(g_SPARSE_PIPELINE, TEST_FRAMES, sparse_results);

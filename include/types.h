@@ -23,6 +23,6 @@ typedef unsigned long uint64;
 
 #define PI	3.14159265358979323846
 
-#define RAW_TYPE  float
+#define RAW_TYPE  uint8
 
 #endif
