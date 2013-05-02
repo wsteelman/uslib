@@ -1,4 +1,5 @@
 #include <stdlib.h>
+#include <unistd.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/time.h>
@@ -33,7 +34,7 @@ FrameList      *g_free_list;
 void drawBitmapText(char *s, float x, float y) 
 {  
    glColor3f(1.0f, 1.0f, 1.0f);
-   glWindowPos2i(x,y);
+   //glWindowPos2i(x,y);
 
    glLoadIdentity();
    glTranslatef(0.0f, 0.0f, 1.0f);
@@ -54,7 +55,7 @@ void ImageGen()
       return;
    }
 
-   glWindowPos2i(0,0);
+   //glWindowPos2i(0,0);
    glDrawPixels(f->GetDisplayWidth(), 
                 f->GetDisplayHeight(), 
                 GL_LUMINANCE, 
@@ -62,14 +63,15 @@ void ImageGen()
                 f->GetDisplayBuffer());
    g_perf_cnt++;
    int time = glutGet(GLUT_ELAPSED_TIME);
-   if (time - g_timebase > 5000)
+   if (time - g_timebase > 1000)
    {
       g_fps = (float)g_perf_cnt*1000.0f/(float)(time-g_timebase);
       g_timebase = time;
       g_perf_cnt = 0;
    }
    sprintf(g_fps_char, "FPS: %2.2f", g_fps);
-   drawBitmapText(g_fps_char, 10.0f, 10.0f);
+   printf("FPS: %2.2f\r", g_fps);
+   //drawBitmapText(g_fps_char, 10.0f, 10.0f);
    
    glutSwapBuffers();
    g_free_list->ReplaceFrame(f);
@@ -89,7 +91,7 @@ void reshape(int w, int h)
   glViewport(0, 0, (GLsizei) w, (GLsizei) h);
   glMatrixMode(GL_PROJECTION);
   glLoadIdentity();
-  gluPerspective(60.0, (GLfloat) w / (GLfloat) h, 0.01, 500.0);
+  //gluPerspective(60.0, (GLfloat) w / (GLfloat) h, 0.01, 500.0);
   glMatrixMode(GL_MODELVIEW);
   glLoadIdentity();
   //glTranslatef(trans.x, trans.y, trans.z);
@@ -221,7 +223,7 @@ int main(int argc, char **argv)
    ImageFactory *factory = new ImageFactory(64);
    
    // create free list
-   FrameList *g_free_list = new FrameList(100, CHANNELS, VECTORS, SAMPLES, 
+   g_free_list = new FrameList(100, CHANNELS, VECTORS, SAMPLES, 
                                0, IMG_WIDTH * IMG_HEIGHT);
   
    // initialize transducer 
@@ -248,7 +250,7 @@ int main(int argc, char **argv)
 
    // save output ring pointer
    FrameRing *input_ring = factory->GetInputRing(id);
-   FrameRing *g_output_ring = factory->GetOutputRing(id);
+   g_output_ring = factory->GetOutputRing(id);
    
    // start the factory
    factory->Start();

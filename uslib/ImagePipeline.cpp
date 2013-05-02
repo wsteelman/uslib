@@ -10,8 +10,7 @@ namespace uslib
 PipelineStage::PipelineStage(uint32 id, FrameRing *input_ring, FrameRing *output_ring) :
    m_id(id), 
    m_input_ring(input_ring),
-   m_output_ring(output_ring),
-   m_tasks(NULL)
+   m_output_ring(output_ring)
 {
 
 }

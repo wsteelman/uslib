@@ -1,4 +1,5 @@
-
+#include <stdio.h>
+#include <string.h>
 #include "FocusMapSparseMulti.hh"
 #include "Utils.hh"
 
@@ -184,6 +185,7 @@ FocusMapSparseMulti::Run(Frame *f, uint32 thread_id)
             uint32 sample = sd->sample[c];
             for (uint32 s = 0; s < sd->num_samples[c]; s++)
             {
+               //sum += (float)(data[c][sample++] - 0x80) * 
                sum += (float)(data[c][sample++]) * 
                       m_upsample_taps[tap]; 
                tap += m_upsample_factor;
@@ -191,6 +193,7 @@ FocusMapSparseMulti::Run(Frame *f, uint32 thread_id)
          }
          else
          {
+            //sum += (float)(data[c][sd->sample[c]] - 0x80);
             sum += (float)data[c][sd->sample[c]];
          }
       }

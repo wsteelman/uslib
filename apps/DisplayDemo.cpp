@@ -16,7 +16,6 @@
 #include "FocusMapSparse.hh"
 #include "FocusMapSparse2.hh"
 #include "FocusMapSparseMulti.hh"
-#include "FocusMapSparseMulti2.hh"
 #include "SectorImageMapRF.hh"
 #include "SectorImageMapFast.hh"
 #include "SectorImageMapF2.hh"

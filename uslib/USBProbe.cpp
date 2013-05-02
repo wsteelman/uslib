@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <pthread.h>
+#include <unistd.h>
 
 #include "Utils.hh"
 #include "USBProbe.hh"
@@ -49,10 +50,10 @@ USBProbe::InitializeHW(uint32 frames)
       printf("Unable to open USB device, code = 0x%x\n", rc);
       return ERROR;
    }
-   m_vectors = GetVectorCount();
-   m_samples = GetSampleCount();
-   m_channels = GetChannelCount();
-   m_sample_rate = GetSamplingRate(); 
+   m_vectors = USBGetVectorCount();
+   m_samples = USBGetSampleCount();
+   m_channels = USBGetChannelCount();
+   m_sample_rate = USBGetSamplingRate(); 
 
    return SUCCESS;   
 }
@@ -120,7 +121,6 @@ USBProbe::Run()
          if (code != USB_SUCCESS)
          {
             m_list->ReplaceFrame(f);
-            continue;
          } 
  
          err rc = m_ring->Write(f);

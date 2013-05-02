@@ -191,7 +191,7 @@ SectorImageMapF2::ScanConvert(Frame *f)
    float *in_float = f->GetFocusBuffer();
 	for(i = 0; i < size; i++)
 	{
-		pmap	= *(map_ptr++);
+      pmap	= *(map_ptr++);
       if (!pmap.valid)
       {
          pixel = 0;
@@ -207,7 +207,7 @@ SectorImageMapF2::ScanConvert(Frame *f)
 		   }
 		   //pixel += *(tgc + (pmap.sample1 % m_samples));
 	
-		   if(pixel < 0)
+		   if(pixel <= 0)
 		   {
 		   	pixel = 0;
 		   }

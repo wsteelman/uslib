@@ -1,4 +1,5 @@
-
+#include <stdio.h>
+#include <string.h>
 #include "FocusMapSparse2.hh"
 #include "Utils.hh"
 #include "perf.hh"
